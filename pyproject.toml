@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "my-test-kf"
+version = "0.1.0"
+description = ""
+authors = ["torupa <xpt77@outlook.com>"]
+readme = "README.md"
+packages = [{include = "my_test_kf"}]
+
+[tool.poetry.dependencies]
+python = ">=3.9,<3.13"
+numpy = "^1.25.0"
+matplotlib = "^3.7.1"
+notebook = "^6.5.4"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

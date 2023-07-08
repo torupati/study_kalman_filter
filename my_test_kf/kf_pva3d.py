@@ -5,9 +5,10 @@ Fs = 10
 t_end = 10.0
 
 sig_acc = np.diag([0.0, 0.0, 0.0]) # noise density of acceleration
-R = [[0.6, 0.0, 0.0],
-    [0.0, 0.5, -0.0], \
-    [0.0, -0.0, 0.2]] # covariance of position observation
+R = np.array([\
+    [0.6, 0.0, 0.0],
+    [0.0, 0.5, -0.0],
+    [0.0, -0.0, 0.2]]) # covariance of position observation
 
 H = np.array([\
     [1, 0, 0, 0, 0, 0, 0, 0, 0], \
@@ -28,23 +29,13 @@ x_var_init = np.array([\
 # Generate true and observed position
 t_idx = np.arange(0.0, t_end, 1.0/Fs)
 A, W = 5.0, 3.0 * np.pi / t_end
-#pos_true = A * (np.cos(W * t_idx) + 1.2)
-#vel_true = A * (-W * np.sin(W * t_idx))
-#acc_true = A * (-W * W * np.sin(W * t_idx))
-pos_true, vel_true, acc_true = np.zeros(len(t_idx)), np.zeros(len(t_idx)), np.zeros(len(t_idx))
+pos_true = A * (np.cos(W * t_idx) - 1.0)
+vel_true = A * (-W * np.sin(W * t_idx))
+acc_true = A * (-W * W * np.sin(W * t_idx))
+#pos_true, vel_true, acc_true = np.zeros(len(t_idx)), np.zeros(len(t_idx)), np.zeros(len(t_idx))
 x_true = np.array([[_x, 0, 0, _v, 0, 0, _a, 0, 0] for _x, _v, _a in zip(pos_true, vel_true, acc_true)])
 pos_obs = np.array([[_x, 0, 0] + np.random.multivariate_normal(np.zeros(3), R) for _x in pos_true])
 
-# ---
-#fig, axes = plt.subplots(2, 1, figsize=(10,6))
-#for _d in range(3):
-#    axes[0].plot(t_idx, x_true[:, _d],  label='true')
-#    axes[0].plot(t_idx, pos_obs[:, _d], '.', label="obs")
-#axes[1].plot(t_idx[:-1], np.diff(pos_true), label='true')
-#for a in axes:
-#    a.grid(True)
-#    a.legend()
-#plt.savefig('posvel3d.png')
 
 # ---
 # Kalman Filter
@@ -79,7 +70,7 @@ for i, (t, y) in enumerate(zip(t_idx, pos_obs)):
     Q = np.zeros([9, 9])
     Q[0:3, 0:3] = 1.0 / 20.0 * np.power(dt, 5) * sig_acc # E[p(t)p(t)]
     Q[0:3, 3:6] = Q[3:6, 0:3] = 1.0 / 8.0 * np.power(dt, 4) * sig_acc # E[p(t)v(t)]
-    Q[0:3, 6:9] = Q[6:9, 0:3] =  np.power(dt, 3) * sig_acc #* (1.0 / 6.0)# E[p(t)a(t)]
+    Q[0:3, 6:9] = Q[6:9, 0:3] =  np.power(dt, 3) * sig_acc * (1.0 / 6.0)# E[p(t)a(t)]
     Q[3:6, 3:6] = 1.0 / 3.0 * np.power(dt, 3) * sig_acc # E[v(t)v(t)]
     Q[3:6, 0:3] = Q[3:6, 0:3] = 1.0 / 2.0 * np.power(dt, 2) * sig_acc # E[v(t)a(t)]
     Q[6:9, 6:9] = dt * sig_acc # E[a(t)a(t)]

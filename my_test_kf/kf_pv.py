@@ -3,18 +3,21 @@ import matplotlib.pyplot as plt
 
 # Plot error bars in estimation
 
-Fs = 10
-t_end = 10.0
+Fs = 2
+#t_motion_start, t_motion_end = 1.0, 9.0
+t_end = 60.0
 
-sig0 = 1.0 # noise density of acceleration
+sig0 = 1.0 # 1.0 # noise density of acceleration
 sig1 = 0.5  # standard deviation of position observation
 
 H = np.array([1, 0]).reshape(1, 2)
 R = [sig1 * sig1]
-x_var_init = np.array([[10.0, 0.0], [0.0, 10.0]])
+x_var_init = np.array([[4.0, 0.0], [0.0, 4.0]])
 # Generate true and observed position
 t_idx = np.arange(0.0, t_end, 1.0/Fs)
-pos_true = 2.3 * (np.cos((4.0 * np.pi / t_end) * t_idx) + 1.2)
+W = 4.0 * np.pi / t_end
+pos_true = 2.3 * (np.cos(W * t_idx)  - 1.0)
+vel_true = 2.3 * W * (-np.sin(W * t_idx))
 pos_obs = pos_true + np.random.normal(0.0, sig1*sig1, len(pos_true))
 
 fig, axes = plt.subplots(2, 1)
@@ -76,13 +79,15 @@ axes[0].plot(t_idx, pos_true, label='true')
 axes[0].plot(t_idx, pos_obs, '.', label="obs")
 axes[0].set_ylabel('position [m]')
 axes[1].plot(t_est, vel_est,  label='KF fliter')
-axes[1].plot(t_idx[:-1], np.diff(pos_true) / (1.0 / Fs), label='true')
+axes[1].plot(t_idx, vel_true, label='true')
 axes[1].set_ylabel('velocity [m/s]')
 for a in axes:
     a.grid(True)
     a.legend()
 
-plt.savefig('kf_1d_state_filter.png')
+ofile = 'kf_1d_state_filter.png'
+plt.savefig(ofile)
+print(ofile)
 # ---
 
 t_smooth = []
@@ -131,7 +136,9 @@ for a in axes:
     a.grid(True)
     a.legend()
 
-plt.savefig('kf_1d_state_smooth.png')
+ofile = 'kf_1d_state_smooth.png'
+plt.savefig(ofile)
+print(ofile)
 
 #
 fig, axes = plt.subplots(2, 1)

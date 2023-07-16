@@ -1,6 +1,6 @@
 import numpy as np
 
-def generate_true_pos_vel_acc_type1(t_idx):
+def generate_true_pos_vel_acc_3d_type1(t_idx):
     """
     """
     A, W = 5.0, 2.0 * np.pi / 10.0
@@ -34,3 +34,6 @@ def kf_pv_1d_type1_condition():
     x0_var = np.array([[4.0, 0.0], [0.0, 4.0]])
     sig_acc, sig_pos = 1.0, 0.5
     return fs, t_end, sig_acc, sig_pos, x0, x0_var
+
+
+

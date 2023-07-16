@@ -36,7 +36,7 @@ for _i, (t, y) in enumerate(zip(t_idx, pos_obs)):
     # measurement update
     S = np.dot(np.dot(H, P), H.T) + R  # inovation (pre-fit residual covariance)
     #K = np.linalg.solve(S, np.dot(P, H.T))
-    K = np.dot(P, H.T) * (1.0 / S)
+    K = np.dot(np.dot(P, H.T), np.linalg.inv(S))
     #print('S=', S, 'K=', K)
     #print('y - H*x=', y - np.dot(H, x))
     x = x + np.dot(K, y - np.dot(H, x))

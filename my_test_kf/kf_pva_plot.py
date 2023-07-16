@@ -1,7 +1,6 @@
 import matplotlib.pyplot as plt
 
 def plot_kf_pva3d_states_filter(t_idx, x_est, x_true, pos_obs):
-
     fig, axes = plt.subplots(3, 3, figsize=(18, 12))
     plt.suptitle(f'Simulation')
     for _d, _lb in enumerate(['X', 'Y', 'Z']):

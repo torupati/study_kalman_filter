@@ -2,6 +2,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pykalman import KalmanFilter
 
+
+from x_generator import generate_true_pos_vel_acc_type1
+
+np.random.seed(0)
+
 Fs = 10
 t_end = 30.0
 
@@ -31,13 +36,10 @@ x_var_init = np.array([\
 
 # Generate true and observed position
 t_idx = np.arange(0.0, t_end, 1.0/Fs)
-A, W = 5.0, 2.0 * np.pi / 10.0
-pos_true = A * (np.cos(W * t_idx) - 1.0)
-vel_true = A * (-W * np.sin(W * t_idx))
-acc_true = A * (-W * W * np.sin(W * t_idx))
-#pos_true, vel_true, acc_true = np.zeros(len(t_idx)), np.zeros(len(t_idx)), np.zeros(len(t_idx))
-x_true = np.array([[_x, 0, 0, _v, 0, 0, _a, 0, 0] for _x, _v, _a in zip(pos_true, vel_true, acc_true)])
-pos_obs = np.array([[_x, 0, 0] + np.random.multivariate_normal(np.zeros(3), R) for _x in pos_true])
+
+
+x_true = generate_true_pos_vel_acc_type1(t_idx)
+pos_obs = np.array([_x[0:3] + np.random.multivariate_normal(np.zeros(3), R) for _x in x_true])
 
 # ---
 # Kalman Filter
@@ -51,6 +53,7 @@ F = np.array([\
         [0, 0, 0, 0, 0, 0, 1, 0, 0], \
         [0, 0, 0, 0, 0, 0, 0, 1, 0], \
         [0, 0, 0, 0, 0, 0, 0, 0, 1]])
+
 Q = np.zeros([9, 9])
 Q[0:3, 0:3] = 1.0 / 20.0 * np.power(dt, 5) * sig_acc # E[p(t)p(t)]
 Q[0:3, 3:6] = Q[3:6, 0:3] = 1.0 / 8.0 * np.power(dt, 4) * sig_acc # E[p(t)v(t)]
@@ -95,8 +98,8 @@ print(ofile)
 
 # ------
 kf = KalmanFilter(transition_matrices=F, transition_covariance=Q, n_dim_obs = 3)
-#x_smooth, P_smooth = kf.smooth(pos_obs)
-x_smooth, P_smooth = kf.em(pos_obs, n_iter = 30).smooth(pos_obs)
+x_smooth, P_smooth = kf.smooth(pos_obs)
+#x_smooth, P_smooth = kf.em(pos_obs, n_iter = 30).smooth(pos_obs)
 
 # ------
 fig, axes = plt.subplots(3, 3, figsize=(18, 12))

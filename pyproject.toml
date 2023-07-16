@@ -11,8 +11,14 @@ python = ">=3.9,<3.13"
 numpy = "^1.25.0"
 matplotlib = "^3.7.1"
 notebook = "^6.5.4"
+pykalman = "^0.9.5"
+scipy = "^1.11.1"
 
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+packages = [
+    { include = "my_test_kf", from = "."}
+] 

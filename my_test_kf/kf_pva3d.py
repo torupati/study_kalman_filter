@@ -51,6 +51,7 @@ if __name__ == '__main__':
 
     from x_generator import generate_true_pos_vel_acc_3d_type1
     from kf_pva_plot import plot_kf_pva3d_states_filter, plot_kf_pva3d_states_smoother
+    from kf_pva_plot import plot_kf_pva3d_states_var, plot_kf_pva3d_state_filter
 
     Fs = 10
     t_end = 10.0
@@ -120,29 +121,7 @@ if __name__ == '__main__':
         P_pred.append(P)
 
     # ------
-    fig, axes = plt.subplots(3, 3, figsize=(18, 12))
-    plt.suptitle(f'Simulation')
-    for _d, _lb in enumerate(['X', 'Y', 'Z']):
-        axes[_d,0].plot(t_idx, [v[_d] for v in x_true], label='true')
-        axes[_d,0].plot(t_est, [v[_d] for v in x_est], '.', label=f'KF fliter {_lb}')
-        axes[_d,0].plot(t_pred, [v[_d] for v in x_pred], '.', label=f'prediction {_lb}')
-        axes[_d,0].plot(t_idx, [v[_d] for v in pos_obs], 'o', label="obs")
-        axes[_d,0].set_ylabel(f'position {_lb} [m]')
-    for _d, _lb in enumerate(['X', 'Y', 'Z']):
-        axes[_d,1].plot(t_idx, [v[3+_d] for v in x_true], label=f'true {_lb}')
-        axes[_d,1].plot(t_est, [v[3+_d] for v in x_est], '.', label=f'KF fliter {_lb}')
-        axes[_d,1].plot(t_pred, [v[3+_d] for v in x_pred], '.',  label=f'prediction {_lb}')
-        axes[_d,1].set_ylabel(f'Velocity {_lb} [m]')
-    for _d, _lb in enumerate(['X', 'Y', 'Z']):
-        axes[_d,2].plot(t_idx, [v[6+_d] for v in x_true], label=f'true')
-        axes[_d,2].plot(t_est, [v[6+_d] for v in x_est], '.', label='KF fliter')
-        axes[_d,2].plot(t_pred, [v[6+_d] for v in x_pred], '.', label='prediction')
-        axes[_d,2].set_ylabel(u'acc [m/s$^2$]')
-    for i in range(axes.shape[0]):
-        for j in range(axes.shape[1]):
-            axes[i,j].grid(True)
-            axes[i,j].legend(loc='upper left')
-
+    fig = plot_kf_pva3d_state_filter(t_idx, x_true, t_est, x_est, t_pred, x_pred, pos_obs)
     ofile = 'kf_3d_state_filter.png'
     plt.savefig(ofile)
     print(ofile)
@@ -193,30 +172,15 @@ if __name__ == '__main__':
         #print('P_back=', _P_back)
 
     # ------
-    # plot state
+    # plot state.
     fig = plot_kf_pva3d_states_smoother(t_est, x_est, P_est, x_smooth, P_smooth, t_idx, x_true, pos_obs)
     ofile = 'kf_3d_state_smoother.png'
     fig.savefig(ofile)
     print(ofile)
 
     # ------
-    fig, axes = plt.subplots(3, 3, figsize=(18, 12))
-    plt.suptitle(f'Simulation')
-    for _d, _lb in enumerate(['X', 'Y', 'Z']):
-        axes[_d,0].plot(t_est, [v[_d, _d] for v in P_est],  label='KF fliter')
-        axes[_d,0].plot(t_smooth, [v[_d, _d] for v in P_smooth],  label='KF smoothing')
-    for _d, _lb in enumerate(['X', 'Y', 'Z']):
-        axes[_d,1].plot(t_est, [v[3+_d, 3+_d] for v in P_est],  label='KF fliter')
-        axes[_d,1].plot(t_smooth, [v[3+_d, 3+_d] for v in P_smooth],  label='KF smoothing')
-    for _d, _lb in enumerate(['X', 'Y', 'Z']):
-        axes[_d,2].plot(t_est, [v[6+_d, 6+_d] for v in P_est],  label='KF fliter')
-        axes[_d,2].plot(t_smooth, [v[6+_d, 6+_d] for v in P_smooth],  label='KF smoothing')
-    for i in range(axes.shape[0]):
-        for j in range(axes.shape[1]):
-            axes[i,j].grid(True)
-            axes[i,j].legend(loc='upper left')
-            axes[i,j].set_yscale('log')
-
+    # Plot variance
+    fig = plot_kf_pva3d_states_var(t_est, P_est, t_smooth, P_smooth)
     ofile = 'kf_3d_state_var.png'
-    plt.savefig(ofile)
+    fig.savefig(ofile)
     print(ofile)

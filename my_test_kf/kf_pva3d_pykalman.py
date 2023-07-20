@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from pykalman import KalmanFilter
 
 from x_generator import generate_true_pos_vel_acc_3d_type1
-from kf_pva_plot import plot_kf_pva3d_states_filter, plot_kf_pva3d_states_smoother
+from kf_pva_plot import plot_kf_pva3d_states_filter, plot_kf_pva3d_states_smoother, plot_kf_pva3d_states_var
 
 from kf_pva3d import KalmanFilterPVA_RandomAcc3d
 
@@ -73,10 +73,10 @@ def run_test():
 
     dt = 1.0 / Fs
     sig_acc = np.diag([0.4, 0.01, 0.01]) # noise density of acceleration
-    R = np.array([\
+    sig_obs = [\
         [0.6, 0.0, 0.0],
         [0.0, 0.5, -0.0], \
-        [0.0, -0.0, 0.2]]) # covariance of position observation
+        [0.0, -0.0, 0.2]] # covariance of position observation
 
     x_init = np.array([0.0, 0.0, 0.0,0.0, 0.0, 0.0,0.0, 0.0, 0.0])
     x_var_init = np.array([\
@@ -94,17 +94,18 @@ def run_test():
 
 
     # Generate true and observed position
-    t_idx = np.arange(0.0, t_end, 1.0/Fs)
+    t_idx = np.arange(0.0, t_end, 1.0 / Fs)
     x_true = generate_true_pos_vel_acc_3d_type1(t_idx)
-    pos_obs = np.array([[_x[0], 0, 0] + np.random.multivariate_normal(np.zeros(3), R) for _x in x_true])
+    R = np.array([ sig_obs for i in range(len(t_idx))])
+    pos_obs = np.array([[_x[0], 0, 0] + np.random.multivariate_normal(np.zeros(3), _R) for _x, _R in zip(x_true, R)])
 
     pos_obs_file = 'pos3d_obs.csv'
     with open(pos_obs_file, 'w') as f:
         f.write('time,x,y,z,s_xx,s_yy,s_zz,s_xy,s_xz,s_yz\n')
-        for _t, _v in zip(t_idx, pos_obs):
+        for _t, _v, _R in zip(t_idx, pos_obs, R):
             f.write(f'{_t:.3f},{_v[0]:.3f},{_v[1]:.3f},{_v[2]:.3f}')
-            s_xx, s_yy, s_zz = R[0, 0], R[1, 1], R[2, 2]
-            s_xy, s_yz, s_xz = R[0, 1], R[1, 2], R[0, 2]
+            s_xx, s_yy, s_zz = _R[0, 0], _R[1, 1], _R[2, 2]
+            s_xy, s_yz, s_xz = _R[0, 1], _R[1, 2], _R[0, 2]
             f.write(f',{s_xx:.3f},{s_yy:.3f},{s_zz:.3f},{s_xy:.3f},{s_yz:.3f},{s_xz:.3f}')
             f.write('\n')
         print(f.name)
@@ -161,20 +162,26 @@ def main(args):
         print(e)
         return
     t_idx = data[:, 0]
+    if args.time_reset:
+        t_idx = t_idx - t_idx[0]
     dt = t_idx[1] - t_idx[0]
     pos_obs = data[:, 1:1+3]
-    pos_var = data[0, 4:4 + 6]
-    s_xx, s_yy, s_zz, s_xy, s_xz, s_yz = pos_var[0], pos_var[1], pos_var[2], pos_var[3], pos_var[4], pos_var[5]
-    R = np.array([[s_xx, s_xy, s_xz], [s_xy, s_yy, s_yz], [s_xz, s_yz, s_zz]])
+#    pos_var = data[0, 4:4 + 6]
+#    s_xx, s_yy, s_zz, s_xy, s_xz, s_yz = pos_var[0], pos_var[1], pos_var[2], pos_var[3], pos_var[4], pos_var[5]
+#    R = np.array([[s_xx, s_xy, s_xz], [s_xy, s_yy, s_yz], [s_xz, s_yz, s_zz]])
+    R = []
+    for i in range(len(data)):
+        pos_var = data[i, 4:4 + 6]
+        s_xx, s_yy, s_zz, s_xy, s_xz, s_yz = pos_var[0], pos_var[1], pos_var[2], pos_var[3], pos_var[4], pos_var[5]
+        R.append([[s_xx, s_xy, s_xz], [s_xy, s_yy, s_yz], [s_xz, s_yz, s_zz]])
 
+    # read KF parameter
     with open(args.param_file) as f:
         prm = json.load(f)
         print(prm)
         sig_acc = np.array(prm['parameters']['sig_acc'])
         x_init = prm['parameters']['x_init']
         x_var_init = prm['parameters']['x_var_init']
-    print('dt=', dt)
-    print('sig_acc=',sig_acc)
 
     x_est, P_est = run_pykalman_kalman_filter(dt, sig_acc, x_init, x_var_init, pos_obs, R)
     x_smooth, P_smooth = run_pykalman_kalman_smoother(dt, sig_acc, x_init, x_var_init, pos_obs, R)
@@ -182,6 +189,12 @@ def main(args):
     # ------
     fig = plot_kf_pva3d_states_smoother(t_idx, x_est, P_est, x_smooth, P_smooth, t_idx, [], pos_obs)
     ofile = 'out_kf_3d_state_smoother_pykalman.png'
+    plt.savefig(ofile)
+    print(ofile)
+
+    # ------
+    fig = plot_kf_pva3d_states_var(t_idx, P_est, t_idx, P_smooth)
+    ofile = 'out_kf_3d_var_smoother_pykalman.png'
     plt.savefig(ofile)
     print(ofile)
 
@@ -196,6 +209,7 @@ if __name__ == '__main__':
     parser.add_argument('obs_file', type=str, help='observation data (*.csv)')
     #parser.add_argument('-c', '--count')
     parser.add_argument('-d', '--debug', action='store_true', help='logging in debug mode')
+    parser.add_argument('-T', '--time_reset', action='store_true', help='reset time')
     args = parser.parse_args()
 
     main(args)

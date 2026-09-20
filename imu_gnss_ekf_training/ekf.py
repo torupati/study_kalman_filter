@@ -93,11 +93,11 @@ class ImuGnssEkf:
         F[IDX_VX, IDX_YAW] = dt * dax_dyaw
         F[IDX_VY, IDX_YAW] = dt * day_dyaw
         F[IDX_X, IDX_BAX] = -0.5 * dt**2 * c
-        F[IDX_X, IDX_BAY] = 0.5 * dt**2 * s
+        F[IDX_X, IDX_BAY] = -0.5 * dt**2 * s
         F[IDX_Y, IDX_BAX] = -0.5 * dt**2 * s
         F[IDX_Y, IDX_BAY] = -0.5 * dt**2 * c
         F[IDX_VX, IDX_BAX] = -dt * c
-        F[IDX_VX, IDX_BAY] = dt * s
+        F[IDX_VX, IDX_BAY] = -dt * s
         F[IDX_VY, IDX_BAX] = -dt * s
         F[IDX_VY, IDX_BAY] = -dt * c
         F[IDX_YAW, IDX_BG] = -dt

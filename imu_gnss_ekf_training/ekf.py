@@ -111,8 +111,8 @@ class ImuGnssEkf:
         F[IDX_YAW, IDX_BG] = -dt
 
         G = np.zeros((STATE_SIZE, 6), dtype=float)
-        G[IDX_X:IDX_Y + 1, 0:2] = 0.5 * dt**2 * rotation
-        G[IDX_VX:IDX_VY + 1, 0:2] = dt * rotation
+        G[[IDX_X, IDX_Y], 0:2] = 0.5 * dt**2 * rotation
+        G[[IDX_VX, IDX_VY], 0:2] = dt * rotation
         G[IDX_YAW, 2] = dt
         G[IDX_BAX, 3] = np.sqrt(dt)
         G[IDX_BAY, 4] = np.sqrt(dt)

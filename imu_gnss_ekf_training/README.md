@@ -22,7 +22,7 @@ and GNSS measurements
 \mathbf{z} = [x^{GNSS},\ y^{GNSS},\ v_x^{GNSS},\ v_y^{GNSS}]^T.
 \]
 
-The continuous-time training model is
+The continuous-time process model is
 
 - \(\dot{x} = v_x\)
 - \(\dot{y} = v_y\)

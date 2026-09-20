@@ -18,6 +18,12 @@ IDX_BG = 7
 
 @dataclass(frozen=True)
 class EkfConfig:
+    """EKF tuning parameters.
+
+    The bias walk values are random-walk noise densities, so the per-step
+    increment standard deviation is `walk_std * sqrt(dt)`.
+    """
+
     accel_noise_std: float = 0.12
     gyro_noise_std: float = 0.015
     accel_bias_walk_std: float = 0.01

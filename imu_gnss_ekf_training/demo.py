@@ -21,7 +21,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def summarise_errors(truth_states: np.ndarray, state_estimates: np.ndarray) -> dict[str, float]:
+def summarize_errors(truth_states: np.ndarray, state_estimates: np.ndarray) -> dict[str, float]:
     position_rmse = np.sqrt(
         np.mean(np.sum((state_estimates[:, [IDX_X, IDX_Y]] - truth_states[:, [IDX_X, IDX_Y]]) ** 2, axis=1))
     )
@@ -79,7 +79,7 @@ def main() -> None:
     output_path = save_figure(figure, args.output_dir / "ekf_summary.png")
     print(f"saved figure: {output_path}")
 
-    for key, value in summarise_errors(np.asarray(scenario["truth_states"]), np.asarray(result["state_estimates"])).items():
+    for key, value in summarize_errors(np.asarray(scenario["truth_states"]), np.asarray(result["state_estimates"])).items():
         print(f"{key}: {value:.6f}")
 
 

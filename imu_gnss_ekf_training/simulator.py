@@ -9,6 +9,12 @@ from .ekf import IDX_BG, IDX_BAX, IDX_BAY, IDX_VX, IDX_VY, IDX_X, IDX_Y, IDX_YAW
 
 @dataclass(frozen=True)
 class SimulatorConfig:
+    """Simulator parameters.
+
+    The bias walk values are random-walk noise densities, so the per-step
+    increment standard deviation is `walk_std * sqrt(dt)`.
+    """
+
     total_time: float = 60.0
     dt: float = 0.1
     gnss_period: float = 0.5

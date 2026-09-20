@@ -5,7 +5,7 @@ from pathlib import Path
 
 import numpy as np
 
-from .demo import summarise_errors
+from .demo import summarize_errors
 from .ekf import EkfConfig, run_filter
 from .plotting import create_experiment_figure, save_figure
 from .simulator import SimulatorConfig, simulate_scenario
@@ -38,7 +38,7 @@ def main() -> None:
                 gnss_velocity_std=simulator_config.gnss_velocity_std,
             ),
         )
-        summary = summarise_errors(np.asarray(scenario["truth_states"]), np.asarray(result["state_estimates"]))
+        summary = summarize_errors(np.asarray(scenario["truth_states"]), np.asarray(result["state_estimates"]))
         print(f"{label}:")
         for key, value in summary.items():
             print(f"  {key}: {value:.6f}")

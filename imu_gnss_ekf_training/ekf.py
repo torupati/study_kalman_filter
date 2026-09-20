@@ -24,6 +24,11 @@ class EkfConfig:
     gyro_bias_walk_std: float = 0.0025
     gnss_position_std: float = 1.5
     gnss_velocity_std: float = 0.35
+    initial_position_std: float = 5.0
+    initial_velocity_std: float = 2.0
+    initial_yaw_std_rad: float = np.deg2rad(45.0)
+    initial_accel_bias_std: float = 0.5
+    initial_gyro_bias_std: float = 0.05
 
 
 def wrap_angle(angle: float | np.ndarray) -> float | np.ndarray:
@@ -129,6 +134,7 @@ class ImuGnssEkf:
         """Apply a GNSS position/velocity update."""
         innovation = measurement - self.H @ predicted_state
         innovation_covariance = self.H @ predicted_covariance @ self.H.T + self.R
+        # Solve S K^T = (P H^T)^T instead of forming S^{-1} explicitly.
         kalman_gain = np.linalg.solve(
             innovation_covariance.T,
             (predicted_covariance @ self.H.T).T,
@@ -162,7 +168,18 @@ def run_filter(
 
     ekf = ImuGnssEkf(config)
     state = np.zeros(STATE_SIZE, dtype=float) if initial_state is None else initial_state.astype(float).copy()
-    covariance = np.diag([25.0, 25.0, 4.0, 4.0, np.deg2rad(45.0) ** 2, 0.5, 0.5, 0.05])
+    covariance = np.diag(
+        [
+            config.initial_position_std**2,
+            config.initial_position_std**2,
+            config.initial_velocity_std**2,
+            config.initial_velocity_std**2,
+            config.initial_yaw_std_rad**2,
+            config.initial_accel_bias_std**2,
+            config.initial_accel_bias_std**2,
+            config.initial_gyro_bias_std**2,
+        ]
+    )
     if initial_covariance is not None:
         covariance = initial_covariance.astype(float).copy()
 

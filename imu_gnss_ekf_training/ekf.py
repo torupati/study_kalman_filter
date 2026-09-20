@@ -118,8 +118,9 @@ class ImuGnssEkf:
         G[IDX_BAY, 4] = np.sqrt(dt)
         G[IDX_BG, 5] = np.sqrt(dt)
 
-        # G carries the discrete-time integration factors; process_noise stores
-        # the continuous sensor/bias noise variances that those factors scale.
+        # G carries the discrete-time integration factors. The accel/gyro terms
+        # below are per-sample IMU measurement noise variances, while the bias
+        # terms are random-walk increment variances propagated over one step.
         process_noise = np.diag(
             [
                 self.config.accel_noise_std**2,
@@ -173,19 +174,20 @@ def run_filter(
 
     ekf = ImuGnssEkf(config)
     state = np.zeros(STATE_SIZE, dtype=float) if initial_state is None else initial_state.astype(float).copy()
-    covariance = np.diag(
-        [
-            config.initial_position_std**2,
-            config.initial_position_std**2,
-            config.initial_velocity_std**2,
-            config.initial_velocity_std**2,
-            config.initial_yaw_std_rad**2,
-            config.initial_accel_bias_std**2,
-            config.initial_accel_bias_std**2,
-            config.initial_gyro_bias_std**2,
-        ]
-    )
-    if initial_covariance is not None:
+    if initial_covariance is None:
+        covariance = np.diag(
+            [
+                config.initial_position_std**2,
+                config.initial_position_std**2,
+                config.initial_velocity_std**2,
+                config.initial_velocity_std**2,
+                config.initial_yaw_std_rad**2,
+                config.initial_accel_bias_std**2,
+                config.initial_accel_bias_std**2,
+                config.initial_gyro_bias_std**2,
+            ]
+        )
+    else:
         covariance = initial_covariance.astype(float).copy()
 
     state_history = np.zeros((imu_measurements.shape[0], STATE_SIZE), dtype=float)

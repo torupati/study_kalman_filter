@@ -4,7 +4,7 @@ version = "0.1.0"
 description = ""
 authors = ["torupa <xpt77@outlook.com>"]
 readme = "README.md"
-packages = [{include = "my_test_kf"}]
+packages = [{include = "my_test_kf"}, {include = "imu_gnss_ekf_training"}]
 
 [tool.poetry.dependencies]
 python = ">=3.9,<3.13"

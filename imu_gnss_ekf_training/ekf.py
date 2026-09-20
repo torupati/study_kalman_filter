@@ -90,6 +90,9 @@ class ImuGnssEkf:
         dax_dyaw = -s * accel_body[0] - c * accel_body[1]
         day_dyaw = c * accel_body[0] - s * accel_body[1]
 
+        # With accel_nav = [c * ax_c - s * ay_c, s * ax_c + c * ay_c]^T and
+        # ax_c = ax_meas - bax, ay_c = ay_meas - bay, the bias partials are:
+        # d(accel_nav)/d(bax) = [-c, -s]^T and d(accel_nav)/d(bay) = [s, -c]^T.
         F = np.eye(STATE_SIZE)
         F[IDX_X, IDX_VX] = dt
         F[IDX_Y, IDX_VY] = dt
@@ -115,6 +118,8 @@ class ImuGnssEkf:
         G[IDX_BAY, 4] = np.sqrt(dt)
         G[IDX_BG, 5] = np.sqrt(dt)
 
+        # G carries the discrete-time integration factors; process_noise stores
+        # the continuous sensor/bias noise variances that those factors scale.
         process_noise = np.diag(
             [
                 self.config.accel_noise_std**2,

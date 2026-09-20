@@ -93,11 +93,11 @@ class ImuGnssEkf:
         F[IDX_VX, IDX_YAW] = dt * dax_dyaw
         F[IDX_VY, IDX_YAW] = dt * day_dyaw
         F[IDX_X, IDX_BAX] = -0.5 * dt**2 * c
-        F[IDX_X, IDX_BAY] = -0.5 * dt**2 * s
+        F[IDX_X, IDX_BAY] = 0.5 * dt**2 * s
         F[IDX_Y, IDX_BAX] = -0.5 * dt**2 * s
         F[IDX_Y, IDX_BAY] = -0.5 * dt**2 * c
         F[IDX_VX, IDX_BAX] = -dt * c
-        F[IDX_VX, IDX_BAY] = -dt * s
+        F[IDX_VX, IDX_BAY] = dt * s
         F[IDX_VY, IDX_BAX] = -dt * s
         F[IDX_VY, IDX_BAY] = -dt * c
         F[IDX_YAW, IDX_BG] = -dt
@@ -129,7 +129,10 @@ class ImuGnssEkf:
         """Apply a GNSS position/velocity update."""
         innovation = measurement - self.H @ predicted_state
         innovation_covariance = self.H @ predicted_covariance @ self.H.T + self.R
-        kalman_gain = predicted_covariance @ self.H.T @ np.linalg.inv(innovation_covariance)
+        kalman_gain = np.linalg.solve(
+            innovation_covariance.T,
+            (predicted_covariance @ self.H.T).T,
+        ).T
 
         updated_state = predicted_state + kalman_gain @ innovation
         updated_state[IDX_YAW] = wrap_angle(updated_state[IDX_YAW])

@@ -6,39 +6,39 @@ This directory contains a NumPy-only extended Kalman filter (EKF) training examp
 
 The EKF state is
 
-\[
+$$
 \mathbf{x} = [x,\ y,\ v_x,\ v_y,\ \psi,\ b_{ax},\ b_{ay},\ b_g]^T
-\]
+$$
 
 with body-frame IMU inputs
 
-\[
+$$
 \mathbf{u} = [a_x^m,\ a_y^m,\ \omega_z^m]^T
-\]
+$$
 
 and GNSS measurements
 
-\[
+$$
 \mathbf{z} = [x^{GNSS},\ y^{GNSS},\ v_x^{GNSS},\ v_y^{GNSS}]^T.
-\]
+$$
 
 The continuous-time process model is
 
-- \(\dot{x} = v_x\)
-- \(\dot{y} = v_y\)
-- \(\dot{\mathbf{v}} = R(\psi) (\mathbf{a}^m - \mathbf{b}_a)\)
-- \(\dot{\psi} = \omega_z^m - b_g\)
-- \(\dot{b}_{ax}, \dot{b}_{ay}, \dot{b}_{g}\) are random walks
+- $\dot{x} = v_x$
+- $\dot{y} = v_y$
+- $\dot{\mathbf{v}} = R(\psi) (\mathbf{a}^m - \mathbf{b}_a)$
+- $\dot{\psi} = \omega_z^m - b_g$
+- $\dot{b}_{ax}, \dot{b}_{ay}, \dot{b}_{g}$ are random walks
 
 where
 
-\[
+$$
 R(\psi) =
 \begin{bmatrix}
 \cos\psi & -\sin\psi \\
 \sin\psi & \cos\psi
 \end{bmatrix}.
-\]
+$$
 
 The implementation in `ekf.py` discretizes this model, propagates the covariance with the EKF Jacobian, and normalizes yaw to `[-pi, pi)` after prediction and update.
 

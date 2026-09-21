@@ -37,11 +37,6 @@ class EkfConfig:
     initial_gyro_bias_std: float = 0.05
 
 
-def wrap_angle(angle: float | np.ndarray) -> float | np.ndarray:
-    """Wrap an angle to [-pi, pi)."""
-    return (angle + np.pi) % (2.0 * np.pi) - np.pi
-
-
 class ImuGnssEkf:
     """Extended Kalman filter for planar inertial/GNSS fusion."""
 
@@ -89,7 +84,8 @@ class ImuGnssEkf:
         predicted[IDX_Y] += state[IDX_VY] * dt + 0.5 * accel_nav[1] * dt**2
         predicted[IDX_VX] += accel_nav[0] * dt
         predicted[IDX_VY] += accel_nav[1] * dt
-        predicted[IDX_YAW] = wrap_angle(yaw + (omega_meas - bg) * dt)
+        predicted[IDX_YAW] = np.arctan2(np.sin(yaw + (omega_meas - bg) * dt),
+                                        np.cos(yaw + (omega_meas - bg) * dt))
 
         c = np.cos(yaw)
         s = np.sin(yaw)
@@ -153,7 +149,8 @@ class ImuGnssEkf:
         ).T
 
         updated_state = predicted_state + kalman_gain @ innovation
-        updated_state[IDX_YAW] = wrap_angle(updated_state[IDX_YAW])
+        updated_state[IDX_YAW] = np.arctan2(np.sin(updated_state[IDX_YAW]),
+                                            np.cos(updated_state[IDX_YAW]))
 
         identity = np.eye(STATE_SIZE)
         residual_projector = identity - kalman_gain @ self.H

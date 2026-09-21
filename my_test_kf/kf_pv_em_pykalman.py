@@ -2,8 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pykalman import KalmanFilter
 
-from x_generator import generte_true_pos_vel_1d_type1, kf_pv_1d_type1_condition
-from kf_pv_plot import plot_kf_1d_var
+from .x_generator import generte_true_pos_vel_1d_type1, kf_pv_1d_type1_condition
+from .kf_pv_plot import plot_kf_1d_var
 
 np.random.seed(0)
 

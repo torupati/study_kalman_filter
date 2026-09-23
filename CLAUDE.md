@@ -8,7 +8,7 @@ A personal study repo for Kalman filter variants (1D position/velocity, 3D posit
 
 ## Commands
 
-This project uses `uv` (see `uv.lock`, `pyproject.toml`, `.python-version` = 3.13). Tests use `pytest` (a dev dependency, see `[dependency-groups]` in `pyproject.toml`); `[tool.pytest.ini_options]` sets `pythonpath = ["."]` so both `imu_gnss_ekf_training` and `my_test_kf` import as packages regardless of invocation directory.
+This project uses `uv` (see `uv.lock`, `pyproject.toml`, `.python-version` = 3.13). Tests use `pytest` and linting uses `ruff` (both dev dependencies, see `[dependency-groups]` in `pyproject.toml`); `[tool.pytest.ini_options]` sets `pythonpath = ["."]` so both `imu_gnss_ekf_training` and `my_test_kf` import as packages regardless of invocation directory.
 
 ```bash
 # run everything
@@ -27,11 +27,14 @@ uv run python -m imu_gnss_ekf_training.demo --total-time 90 --gnss-dropout 0.35 
 
 # run the GNSS-dropout comparison experiment (writes outputs/imu_gnss_ekf_training/dropout_experiments.png)
 uv run python -m imu_gnss_ekf_training.experiments
+
+# lint (no formatter/type-checker configured — ruff is lint-only here)
+uv run ruff check .
 ```
 
-There is no configured linter/formatter/type-checker (no ruff/mypy config in `pyproject.toml`).
+`[tool.ruff]` sets `line-length = 145` (chosen to fit the existing NumPy/matrix-heavy lines without reformatting them) and `[tool.ruff.lint]` selects `E, F, I, UP, W` (pycodestyle, pyflakes, isort, pyupgrade) — deliberately not the stricter pydocstyle/pylint/bugbear rule families, which would be noisy for this repo's scratch scripts.
 
-CI (`.github/workflows/tests.yml`) runs `uv sync` + `uv run pytest -v` on push/PR to `main`.
+CI (`.github/workflows/tests.yml`) runs two independent jobs on push/PR to `main`: `lint` (`uv run ruff check .`) and `pytest` (`uv run pytest -v`).
 
 ## Architecture
 

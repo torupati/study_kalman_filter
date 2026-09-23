@@ -1,11 +1,10 @@
 import numpy as np
-import pytest
 
 from imu_gnss_ekf_training import EkfConfig, SimulatorConfig, run_filter, simulate_scenario
 from imu_gnss_ekf_training.ekf import (
-    IDX_BG,
     IDX_BAX,
     IDX_BAY,
+    IDX_BG,
     IDX_VX,
     IDX_VY,
     IDX_X,

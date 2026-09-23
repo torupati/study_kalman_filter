@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .ekf import IDX_BG, IDX_BAX, IDX_BAY, IDX_VX, IDX_VY, IDX_X, IDX_Y, IDX_YAW, STATE_SIZE
+from .ekf import IDX_BAX, IDX_BAY, IDX_BG, IDX_VX, IDX_VY, IDX_X, IDX_Y, IDX_YAW, STATE_SIZE
 
 
 @dataclass(frozen=True)

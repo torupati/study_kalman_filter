@@ -1,12 +1,12 @@
-import numpy as np
 import json
+
 import matplotlib.pyplot as plt
+import numpy as np
 from pykalman import KalmanFilter
 
-from .x_generator import generate_true_pos_vel_acc_3d_type1
-from .kf_pva_plot import plot_kf_pva3d_states_filter, plot_kf_pva3d_states_smoother, plot_kf_pva3d_states_var
-
 from .kf_pva3d import KalmanFilterPVA_RandomAcc3d
+from .kf_pva_plot import plot_kf_pva3d_states_filter, plot_kf_pva3d_states_smoother, plot_kf_pva3d_states_var
+from .x_generator import generate_true_pos_vel_acc_3d_type1
 
 np.random.seed(0)
 
@@ -53,11 +53,11 @@ def run_pykalman_kalman_smoother(dt, sig_acc, x_init, x_var_init, pos_obs, R):
 def save_params(fname, sig_acc, x_init, x_var_init):
     """
     """
-    if type(sig_acc) == np.ndarray:
+    if isinstance(sig_acc, np.ndarray):
         sig_acc = sig_acc.tolist()
-    if type(x_init) == np.ndarray:
+    if isinstance(x_init, np.ndarray):
         x_init = x_init.tolist()
-    if type(x_var_init) == np.ndarray:
+    if isinstance(x_var_init, np.ndarray):
         x_var_init = x_var_init.tolist()
 
     _out = {\
@@ -128,7 +128,7 @@ def run_test():
 
     # ------
     fig, axes = plt.subplots(3, 3, figsize=(18, 12))
-    plt.suptitle(f'Simulation')
+    plt.suptitle('Simulation')
     for _d, _lb in enumerate(['X', 'Y', 'Z']):
         axes[_d,0].plot(t_idx, [v[_d, _d] for v in P_est],  label='KF fliter')
         axes[_d,0].plot(t_idx, [v[_d, _d] for v in P_smooth],  label='KF smoothing')
@@ -187,13 +187,13 @@ def main(args):
     x_smooth, P_smooth = run_pykalman_kalman_smoother(dt, sig_acc, x_init, x_var_init, pos_obs, R)
 
     # ------
-    fig = plot_kf_pva3d_states_smoother(t_idx, x_est, P_est, x_smooth, P_smooth, t_idx, [], pos_obs)
+    plot_kf_pva3d_states_smoother(t_idx, x_est, P_est, x_smooth, P_smooth, t_idx, [], pos_obs)
     ofile = 'out_kf_3d_state_smoother_pykalman.png'
     plt.savefig(ofile)
     print(ofile)
 
     # ------
-    fig = plot_kf_pva3d_states_var(t_idx, P_est, t_idx, P_smooth)
+    plot_kf_pva3d_states_var(t_idx, P_est, t_idx, P_smooth)
     ofile = 'out_kf_3d_var_smoother_pykalman.png'
     plt.savefig(ofile)
     print(ofile)

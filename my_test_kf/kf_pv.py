@@ -1,8 +1,8 @@
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
 
+from .kf_pv_plot import plot_kf_1d_filter_smooth, plot_kf_1d_var
 from .x_generator import generte_true_pos_vel_1d_type1, kf_pv_1d_type1_condition
-from .kf_pv_plot import plot_kf_1d_var, plot_kf_1d_filter_smooth
 
 # Plot error bars in estimation
 Fs, t_end, sig0, sig1, x_init, x_var_init = kf_pv_1d_type1_condition()
@@ -46,7 +46,7 @@ for _i, (t, y) in enumerate(zip(t_idx, pos_obs)):
     x_est.append(x.tolist())
     P_est.append(P.tolist())
 
-    # time update (skip time update at last epoch) 
+    # time update (skip time update at last epoch)
     if _i >= len(t_idx)-1:
         break
     dt = t_idx[_i+1] - t

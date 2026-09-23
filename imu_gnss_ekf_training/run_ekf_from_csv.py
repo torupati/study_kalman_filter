@@ -26,7 +26,7 @@ from pathlib import Path
 import numpy as np
 
 from .demo import summarize_errors
-from .ekf import STATE_SIZE, IDX_BG, IDX_BAX, IDX_BAY, IDX_VX, IDX_VY, IDX_X, IDX_Y, IDX_YAW, EkfConfig, run_filter
+from .ekf import IDX_BAX, IDX_BAY, IDX_BG, IDX_VX, IDX_VY, IDX_X, IDX_Y, IDX_YAW, STATE_SIZE, EkfConfig, run_filter
 from .plotting import (
     create_output_timeseries_figure,
     create_state_timeseries_figure,

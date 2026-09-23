@@ -5,7 +5,7 @@ from pathlib import Path
 
 import numpy as np
 
-from .ekf import EkfConfig, IDX_BG, IDX_BAX, IDX_BAY, IDX_VX, IDX_VY, IDX_X, IDX_Y, IDX_YAW, run_filter
+from .ekf import IDX_BAX, IDX_BAY, IDX_BG, IDX_VX, IDX_VY, IDX_X, IDX_Y, IDX_YAW, EkfConfig, run_filter
 from .plotting import create_state_timeseries_figure, create_summary_figure, save_figure
 from .simulator import SimulatorConfig, simulate_scenario
 

@@ -49,6 +49,7 @@ The implementation in `ekf.py` discretizes this model, propagates the covariance
 - `plotting.py` – reusable plotting helpers for trajectories, errors, and bias estimates
 - `demo.py` – runnable end-to-end simulator + EKF demo
 - `experiments.py` – simple experiment runner for comparing GNSS dropout cases
+- `doc/` – notes: [coordinate frames](doc/coordinate_frames.md), [process model](doc/dynamics.md), [process noise Q](doc/process_noise.md), [math background](doc/preliminary_math.md)
 
 ## Run the demo
 

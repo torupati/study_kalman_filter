@@ -311,6 +311,10 @@ then combines per-sample IMU measurement noise (`accel_noise_std`,
 through the `sqrt(dt)` factors in `G`) into the full `STATE_SIZE × STATE_SIZE`
 process noise covariance added to `P` each step.
 
+See [`process_noise.md`](process_noise.md) for a full derivation of `Q`: the exact
+(Van Loan) form, the per-sample versus noise-density interpretation of the IMU noise
+parameters, and what the `G Σ Gᵀ` approximation leaves out.
+
 ## Summary
 
 `predict()` implements exactly this two-part linearization: the nominal state

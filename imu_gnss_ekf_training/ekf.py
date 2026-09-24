@@ -135,7 +135,7 @@ class ImuGnssEkf:
         )
         Q = G @ process_noise @ G.T
         predicted_covariance = F @ covariance @ F.T + Q
-        predicted_covariance = 0.5 * (predicted_covariance + predicted_covariance.T)
+        predicted_covariance = 0.5 * (predicted_covariance + predicted_covariance.T) # Ensure symmetry
         return predicted, predicted_covariance
 
     def update(self, predicted_state: np.ndarray, predicted_covariance: np.ndarray, measurement: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -158,7 +158,7 @@ class ImuGnssEkf:
             residual_projector @ predicted_covariance @ residual_projector.T
             + kalman_gain @ self.R @ kalman_gain.T
         )
-        updated_covariance = 0.5 * (updated_covariance + updated_covariance.T)
+        updated_covariance = 0.5 * (updated_covariance + updated_covariance.T) # Ensure symmetry
         return updated_state, updated_covariance
 
 

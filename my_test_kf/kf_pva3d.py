@@ -1,6 +1,7 @@
 import numpy as np
 
-class KalmanFilterPVA_RandomAcc3d():
+
+class KalmanFilterPVA_RandomAcc3d:
     """
     """
 
@@ -41,7 +42,7 @@ class KalmanFilterPVA_RandomAcc3d():
         Q[0:3, 3:6] = Q[3:6, 0:3] = 1.0 / 8.0 * np.power(dt, 4) * self.sig_acc # E[p(t)v(t)]
         Q[0:3, 6:9] = Q[6:9, 0:3] =  np.power(dt, 3) * self.sig_acc * (1.0 / 6.0)# E[p(t)a(t)]
         Q[3:6, 3:6] = 1.0 / 3.0 * np.power(dt, 3) * self.sig_acc # E[v(t)v(t)]
-        Q[3:6, 0:3] = Q[3:6, 0:3] = 1.0 / 2.0 * np.power(dt, 2) * self.sig_acc # E[v(t)a(t)]
+        Q[3:6, 6:9] = Q[6:9, 3:6] = 1.0 / 2.0 * np.power(dt, 2) * self.sig_acc # E[v(t)a(t)]
         Q[6:9, 6:9] = dt * self.sig_acc # E[a(t)a(t)]
         return Q
 
@@ -49,9 +50,12 @@ class KalmanFilterPVA_RandomAcc3d():
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
 
-    from x_generator import generate_true_pos_vel_acc_3d_type1
-    from kf_pva_plot import plot_kf_pva3d_states_filter, plot_kf_pva3d_states_smoother
-    from kf_pva_plot import plot_kf_pva3d_states_var, plot_kf_pva3d_state_filter
+    from .kf_pva_plot import (
+        plot_kf_pva3d_state_filter,
+        plot_kf_pva3d_states_smoother,
+        plot_kf_pva3d_states_var,
+    )
+    from .x_generator import generate_true_pos_vel_acc_3d_type1
 
     Fs = 10
     t_end = 10.0
@@ -154,7 +158,7 @@ if __name__ == '__main__':
         Q[0:3, 3:6] = Q[3:6, 0:3] = 1.0 / 8.0 * np.power(dt, 4) * sig_acc # E[p(t)v(t)]
         Q[0:3, 6:9] = Q[6:9, 0:3] =  np.power(dt, 3) * sig_acc * (1.0 / 6.0)# E[p(t)a(t)]
         Q[3:6, 3:6] = 1.0 / 3.0 * np.power(dt, 3) * sig_acc # E[v(t)v(t)]
-        Q[3:6, 0:3] = Q[3:6, 0:3] = 1.0 / 2.0 * np.power(dt, 2) * sig_acc # E[v(t)a(t)]
+        Q[3:6, 6:9] = Q[6:9, 3:6] = 1.0 / 2.0 * np.power(dt, 2) * sig_acc # E[v(t)a(t)]
         Q[6:9, 6:9] = dt * sig_acc # E[a(t)a(t)]
 
         _x_pred = np.dot(F, x_est[_i])

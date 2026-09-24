@@ -1,9 +1,8 @@
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
 from pykalman import KalmanFilter
 
-from x_generator import generte_true_pos_vel_1d_type1, kf_pv_1d_type1_condition
-from kf_pv_plot import plot_kf_1d_var
+from .x_generator import generte_true_pos_vel_1d_type1, kf_pv_1d_type1_condition
 
 np.random.seed(0)
 
@@ -30,9 +29,9 @@ Q = np.array([\
 R = np.array([sig1 * sig1]).reshape(1,1)
 
 x_init = x_init + np.array([-10,0])
-kf = KalmanFilter(transition_matrices = F, 
-                  observation_matrices = H, 
-                  transition_covariance = Q, 
+kf = KalmanFilter(transition_matrices = F,
+                  observation_matrices = H,
+                  transition_covariance = Q,
                   observation_covariance = R,
                   initial_state_covariance = x_var_init,
                   initial_state_mean = x_init,
@@ -53,14 +52,14 @@ print('after learning: x_init', kf.initial_state_mean)
 
 #---
 fig, axes = plt.subplots(2, 1)
-plt.suptitle(u'Simulation ($\sigma^2$={a})'.format(a=sig0))
+plt.suptitle(rf'Simulation ($\sigma^2$={sig0})')
 axes[0].plot(t_idx, x_est[:,0],  label='Kalman smoother')
-axes[0].plot(t_idx, x_em[:,0], label=u'Kalman smoother EM(itr={n})'.format(n=n_iter))
+axes[0].plot(t_idx, x_em[:,0], label=f'Kalman smoother EM(itr={n_iter})')
 axes[0].plot(t_idx,[v[0] for v in x_true], label='true')
 axes[0].plot(t_idx, pos_obs, '.', label="obs")
 axes[0].set_ylabel('position [m]')
 axes[1].plot(t_idx, x_est[:,1],  label='KF smoother')
-axes[1].plot(t_idx, x_em[:,1], label=u'Kalman smoother EM(itr={n})'.format(n=n_iter))
+axes[1].plot(t_idx, x_em[:,1], label=f'Kalman smoother EM(itr={n_iter})')
 axes[1].plot(t_idx, [v[1] for v in x_true], label='true')
 axes[1].set_ylabel('velocity [m/s]')
 for a in axes:
@@ -73,13 +72,13 @@ print(ofile)
 
 #
 fig, axes = plt.subplots(2, 1)
-plt.suptitle(u'Simulation ($\sigma^2$={a})'.format(a=sig0))
+plt.suptitle(rf'Simulation ($\sigma^2$={sig0})')
 #axes[0].plot(t_idx, P_est[:,0,0],  label='KF fliter')
 axes[0].plot(t_idx, P_em[:,0,0],  label='KF smoothing')
-axes[0].set_ylabel(u'Var[$p(t)$] [m$^2$]')
+axes[0].set_ylabel('Var[$p(t)$] [m$^2$]')
 #axes[1].plot(t_idx, P_est[:,1,1], label='KF fliter')
 axes[1].plot(t_idx, P_em[:,1,1],  label='KF smoothing')
-axes[1].set_ylabel(u'Var[$v(t)$] [m$^2$/s$^2$]')
+axes[1].set_ylabel('Var[$v(t)$] [m$^2$/s$^2$]')
 for a in axes:
     a.grid(True)
     a.set_yscale('log')

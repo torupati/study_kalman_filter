@@ -1,5 +1,6 @@
 import numpy as np
 
+
 def generate_true_pos_vel_acc_3d_type1(t_idx):
     """
     """
@@ -26,7 +27,6 @@ def kf_pv_1d_type1_condition():
     Return a condition.
     - noise density of acceleration
     - variance of positoin observation noise
-    - 
     """
     fs = 2
     t_end = 60.0

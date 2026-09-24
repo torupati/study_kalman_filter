@@ -2,6 +2,7 @@
 Random acceleration model.
 """
 
+import matplotlib.pyplot as plt
 import numpy as np
 
 sig0 = 0.15
@@ -36,7 +37,7 @@ for _ in range(N):
     _p = get_stochastic_proc()
     sim_data.append(_p)
 
-import matplotlib.pyplot as plt
+
 def plot_posvel(sim_data):
     fig, axes = plt.subplots(3, 1, figsize=(10, 6))
     for _i, _v in enumerate(sim_data):
@@ -45,23 +46,22 @@ def plot_posvel(sim_data):
         axes[0].plot (_v['time'], _v['acc'])
 #    axes[0].axhline(y=sig0*np.sqrt(dt), color='r')
 #    axes[0].axhline(y=-sig0*np.sqrt(dt), color='r')
-    axes[0].set_ylabel(u'$a(t)$ [m/s$^2$]')
+    axes[0].set_ylabel('$a(t)$ [m/s$^2$]')
     for _i, _v in enumerate(sim_data):
         if _i > 10:
             break
         axes[1].plot(_v['time'], _v['vel'])
-    axes[1].set_ylabel(u'$v(t)$ [m/s]')
-    dts = np.arange(0, t_end, 0.1)
+    axes[1].set_ylabel('$v(t)$ [m/s]')
  #   axes[1].plot(dts, sig0 * np.sqrt(dts), color='r')
  #   axes[1].plot(dts, -sig0 * np.sqrt(dts), color='r')
     for _i, _v in enumerate(sim_data):
         if _i > 10:
             break
         axes[2].plot(_v['time'], _v['pos'])
-    axes[2].set_ylabel(u'$p(t)$ [m]')
+    axes[2].set_ylabel('$p(t)$ [m]')
 #    axes[2].plot(dts, 1.0/3.0 * sig0 * np.power(dts, 1.5), color='r')
 #    axes[2].plot(dts, -1.0/3.0 * sig0 * np.power(dts, 1.5), color='r')
-    
+
     for a in axes:
         a.grid(True)
         a.set_xlim([0, t_end])
@@ -100,29 +100,29 @@ for tidx in range(tlen):
 fig, axes = plt.subplots(3, 2, figsize=(12, 8), sharex=True)
 fig.suptitle(f'Simulation of Random Jerk Model N={N}')
 t_indices = np.array(t_indices)
-axes[0][0].set_title(u'variance of $a(t)$')
+axes[0][0].set_title('variance of $a(t)$')
 axes[0][0].plot(t_indices, acc_sample_vars, label='sim')
-axes[0][0].plot(t_indices, sig0 * sig0 * t_indices, label=u'$\sigma^2 t$')
+axes[0][0].plot(t_indices, sig0 * sig0 * t_indices, label=r'$\sigma^2 t$')
 
-axes[1][0].set_title(u'variance of $v(t)$')
+axes[1][0].set_title('variance of $v(t)$')
 axes[1][0].plot(t_indices, vel_sample_vars, label='sim')
-axes[1][0].plot(t_indices, (1.0/3.0) * np.power(sig0, 2) * np.power(t_indices, 3), label=u'$1/3\sigma^2 t^3$')
+axes[1][0].plot(t_indices, (1.0/3.0) * np.power(sig0, 2) * np.power(t_indices, 3), label=r'$1/3\sigma^2 t^3$')
 
-axes[2][0].set_title(u'variance of $p(t)$')
+axes[2][0].set_title('variance of $p(t)$')
 axes[2][0].plot(t_indices, pos_sample_vars, label='sim')
-axes[2][0].plot(t_indices, (1.0/20.0) * np.power(sig0, 2) * np.power(t_indices, 5), label=u'$1/20\sigma^2 t^5$')
+axes[2][0].plot(t_indices, (1.0/20.0) * np.power(sig0, 2) * np.power(t_indices, 5), label=r'$1/20\sigma^2 t^5$')
 
-axes[0][1].set_title(u'covariance of $a(t)$ and $v(t)$')
+axes[0][1].set_title('covariance of $a(t)$ and $v(t)$')
 axes[0][1].plot(t_indices, accvel_sample_covs, label='sim')
-axes[0][1].plot(t_indices, (1.0/2.0) * np.power(sig0, 2) * np.power(t_indices, 2), label=u'$1/2\sigma^2 t^2$')
+axes[0][1].plot(t_indices, (1.0/2.0) * np.power(sig0, 2) * np.power(t_indices, 2), label=r'$1/2\sigma^2 t^2$')
 
-axes[1][1].set_title(u'covariance of $v(t)$ and $p(t)$')
+axes[1][1].set_title('covariance of $v(t)$ and $p(t)$')
 axes[1][1].plot(t_indices, velpos_sample_covs, label='sim')
-axes[1][1].plot(t_indices, (1.0/8.0) * np.power(sig0, 2) * np.power(t_indices, 4), label=u'$1/8\sigma^2 t^4$')
+axes[1][1].plot(t_indices, (1.0/8.0) * np.power(sig0, 2) * np.power(t_indices, 4), label=r'$1/8\sigma^2 t^4$')
 
-axes[2][1].set_title(u'covariance of $a(t)$ and $p(t)$')
+axes[2][1].set_title('covariance of $a(t)$ and $p(t)$')
 axes[2][1].plot(t_indices, accpos_sample_covs, label='sim')
-axes[2][1].plot(t_indices, (1.0/6.0) * np.power(sig0, 2) * np.power(t_indices, 3), label=u'$1/6\sigma^2 t^3$')
+axes[2][1].plot(t_indices, (1.0/6.0) * np.power(sig0, 2) * np.power(t_indices, 3), label=r'$1/6\sigma^2 t^3$')
 
 for i in range(axes.shape[0]):
     for j in range(axes.shape[1]):

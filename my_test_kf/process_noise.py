@@ -2,6 +2,7 @@
 Random acceleration model.
 """
 
+import matplotlib.pyplot as plt
 import numpy as np
 
 sig0 = 0.15
@@ -34,7 +35,7 @@ for _ in range(N):
     _p = get_stochastic_proc()
     sim_data.append(_p)
 
-import matplotlib.pyplot as plt
+
 def plot_posvel(sim_data):
     fig, axes = plt.subplots(3, 1, figsize=(10, 6))
     for _i, _v in enumerate(sim_data):
@@ -43,12 +44,11 @@ def plot_posvel(sim_data):
         axes[0].plot (_v['time'], _v['acc'])
     axes[0].axhline(y=sig0/np.sqrt(dt), color='r')
     axes[0].axhline(y=-sig0/np.sqrt(dt), color='r')
-    axes[0].set_ylabel(u'acceleration [m/s$^2$]')
+    axes[0].set_ylabel('acceleration [m/s$^2$]')
     for _i, _v in enumerate(sim_data):
         if _i > 10:
             break
         axes[1].plot(_v['time'], _v['vel'])
-    dts = np.arange(0, t_end, 0.1)
     #axes[1].plot(dts, sig0 * np.sqrt(dts), color='r')
     #axes[1].plot(dts, -sig0 * np.sqrt(dts), color='r')
     axes[1].set_ylabel('velocity[m/s]')
@@ -58,7 +58,7 @@ def plot_posvel(sim_data):
         axes[2].plot (_v['time'], _v['pos'])
     #axes[2].plot(dts, 1.0/3.0 * sig0 * np.power(dts, 1.5), color='r')
     #axes[2].plot(dts, -1.0/3.0 * sig0 * np.power(dts, 1.5), color='r')
-    
+
     for a in axes:
         a.grid(True)
         a.set_xlim([0, t_end])
@@ -95,18 +95,18 @@ fig, axes = plt.subplots(3, 1, figsize=(12, 8), sharex=True)
 t_indices = np.array(t_indices)
 axes[0].set_title('variance of velocity')
 axes[0].plot(t_indices, vel_sample_vars, label='sim')
-axes[0].plot(t_indices, sig0 * sig0 * t_indices, label=u'$\sigma^2 t$')
-axes[0].set_ylabel(u'$Var[v(t)]$ [m/s]')
+axes[0].plot(t_indices, sig0 * sig0 * t_indices, label=r'$\sigma^2 t$')
+axes[0].set_ylabel('$Var[v(t)]$ [m/s]')
 
 axes[1].set_title('variance of position')
 axes[1].plot(t_indices, pos_sample_vars, label='sim')
-axes[1].plot(t_indices, (1.0/3.0) * np.power(sig0, 2) * np.power(t_indices, 3), label=u'$1/3\sigma^2 t^3$')
-axes[1].set_ylabel(u'$Var[p(t)]$ [m]')
+axes[1].plot(t_indices, (1.0/3.0) * np.power(sig0, 2) * np.power(t_indices, 3), label=r'$1/3\sigma^2 t^3$')
+axes[1].set_ylabel('$Var[p(t)]$ [m]')
 
 axes[2].set_title('covariance of position and velocity')
 axes[2].plot(t_indices, velpos_sample_covs, label='sim')
-axes[2].plot(t_indices, (1.0/2.0) * np.power(sig0, 2) * np.power(t_indices, 2), label=u'$1/2\sigma^2 t^3$')
-axes[2].set_ylabel(u'$Cov[p(t)v(t)]$ [m$^2$/s]')
+axes[2].plot(t_indices, (1.0/2.0) * np.power(sig0, 2) * np.power(t_indices, 2), label=r'$1/2\sigma^2 t^3$')
+axes[2].set_ylabel('$Cov[p(t)v(t)]$ [m$^2$/s]')
 for a in axes:
     a.grid(True)
     a.legend()

@@ -1,9 +1,9 @@
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
 from pykalman import KalmanFilter
 
-from x_generator import generte_true_pos_vel_1d_type1, kf_pv_1d_type1_condition
-from kf_pv_plot import plot_kf_1d_var
+from .kf_pv_plot import plot_kf_1d_var
+from .x_generator import generte_true_pos_vel_1d_type1, kf_pv_1d_type1_condition
 
 # Plot error bars in estimation
 Fs, t_end, sig0, sig1, x_init, x_var_init = kf_pv_1d_type1_condition()
@@ -29,9 +29,9 @@ R = np.array([sig1 * sig1]).reshape(1,1)
 #                transition_covariance=Q)
 print(f'F {F.shape} H {H.shape}  Q {Q.shape} R {R.shape} x0 {x_init.shape} x0_cov {x_var_init.shape}')
 
-kf = KalmanFilter(transition_matrices = F, 
-                  observation_matrices = H, 
-                  transition_covariance = Q, 
+kf = KalmanFilter(transition_matrices = F,
+                  observation_matrices = H,
+                  transition_covariance = Q,
                   observation_covariance = R,
                   initial_state_covariance = x_var_init,
                   initial_state_mean = x_init)

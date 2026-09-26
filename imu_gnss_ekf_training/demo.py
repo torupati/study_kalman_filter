@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import argparse
+import dataclasses
 from pathlib import Path
 
 import numpy as np
 
 from .ekf import IDX_BAX, IDX_BAY, IDX_BG, IDX_VX, IDX_VY, IDX_X, IDX_Y, IDX_YAW, EkfConfig, run_filter
+from .navlog import NavLog
 from .plotting import create_state_timeseries_figure, create_summary_figure, save_figure
 from .simulator import SimulatorConfig, simulate_scenario
 
@@ -18,6 +20,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--gnss-period", type=float, default=0.5)
     parser.add_argument("--gnss-dropout", type=float, default=0.15)
     parser.add_argument("--seed", type=int, default=7)
+    parser.add_argument("--save-log", type=Path, default=None, help="Also save a NavLog .npz here (input for animate.py)")
     return parser
 
 
@@ -55,20 +58,34 @@ def main() -> None:
         seed=args.seed,
     )
     scenario = simulate_scenario(simulator_config)
+    ekf_config = EkfConfig(
+        accel_noise_std=simulator_config.accel_noise_std,
+        gyro_noise_std=simulator_config.gyro_noise_std,
+        accel_bias_walk_std=simulator_config.accel_bias_walk_std,
+        gyro_bias_walk_std=simulator_config.gyro_bias_walk_std,
+        gnss_position_std=simulator_config.gnss_position_std,
+        gnss_velocity_std=simulator_config.gnss_velocity_std,
+    )
     result = run_filter(
         imu_measurements=np.asarray(scenario["imu_measurements"]),
         gnss_measurements=np.asarray(scenario["gnss_measurements"]),
         gnss_available=np.asarray(scenario["gnss_available"]),
         dt=float(scenario["dt"]),
-        config=EkfConfig(
-            accel_noise_std=simulator_config.accel_noise_std,
-            gyro_noise_std=simulator_config.gyro_noise_std,
-            accel_bias_walk_std=simulator_config.accel_bias_walk_std,
-            gyro_bias_walk_std=simulator_config.gyro_bias_walk_std,
-            gnss_position_std=simulator_config.gnss_position_std,
-            gnss_velocity_std=simulator_config.gnss_velocity_std,
-        ),
+        config=ekf_config,
     )
+
+    if args.save_log is not None:
+        nav_log = NavLog.from_run(
+            time=np.asarray(scenario["time"]),
+            result=result,
+            gnss_measurements=np.asarray(scenario["gnss_measurements"]),
+            gnss_available=np.asarray(scenario["gnss_available"]),
+            config=ekf_config,
+            truth_states=np.asarray(scenario["truth_states"]),
+            imu_measurements=np.asarray(scenario["imu_measurements"]),
+            metadata={"source": "simulation", "simulator_config": dataclasses.asdict(simulator_config)},
+        )
+        print(f"saved navigation log: {nav_log.save(args.save_log)}")
 
     figure = create_summary_figure(
         time=np.asarray(scenario["time"]),

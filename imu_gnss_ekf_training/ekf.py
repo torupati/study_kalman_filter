@@ -171,7 +171,13 @@ def run_filter(
     initial_state: np.ndarray | None = None,
     initial_covariance: np.ndarray | None = None,
 ) -> dict[str, np.ndarray]:
-    """Run the EKF over a full simulated sequence."""
+    """Run the EKF over a full simulated sequence.
+
+    Besides the posterior `state_estimates`/`covariances`, the result carries the
+    prior (after predict, before update) state/covariance at every step, plus the
+    GNSS innovation `z - H x_prior` and its covariance `H P_prior H^T + R`
+    (NaN on steps without a GNSS update) for consistency checks and animation.
+    """
     if config is None:
         config = EkfConfig()
 
@@ -193,17 +199,22 @@ def run_filter(
     else:
         covariance = initial_covariance.astype(float).copy()
 
-    state_history = np.zeros((imu_measurements.shape[0], STATE_SIZE), dtype=float)
-    covariance_history = np.zeros((imu_measurements.shape[0], STATE_SIZE, STATE_SIZE), dtype=float)
+    num_steps = imu_measurements.shape[0]
+    state_history = np.zeros((num_steps, STATE_SIZE), dtype=float)
+    covariance_history = np.zeros((num_steps, STATE_SIZE, STATE_SIZE), dtype=float)
+    prior_state_history = np.zeros((num_steps, STATE_SIZE), dtype=float)
+    prior_covariance_history = np.zeros((num_steps, STATE_SIZE, STATE_SIZE), dtype=float)
+    innovation_history = np.full((num_steps, MEAS_SIZE), np.nan, dtype=float)
+    innovation_covariance_history = np.full((num_steps, MEAS_SIZE, MEAS_SIZE), np.nan, dtype=float)
 
-    if gnss_available[0]:
-        state, covariance = ekf.update(state, covariance, gnss_measurements[0])
-    state_history[0] = state
-    covariance_history[0] = covariance
-
-    for index in range(1, imu_measurements.shape[0]):
-        state, covariance = ekf.predict(state, covariance, imu_measurements[index - 1], dt)
+    for index in range(num_steps):
+        if index > 0:
+            state, covariance = ekf.predict(state, covariance, imu_measurements[index - 1], dt)
+        prior_state_history[index] = state
+        prior_covariance_history[index] = covariance
         if gnss_available[index]:
+            innovation_history[index] = gnss_measurements[index] - ekf.H @ state
+            innovation_covariance_history[index] = ekf.H @ covariance @ ekf.H.T + ekf.R
             state, covariance = ekf.update(state, covariance, gnss_measurements[index])
         state_history[index] = state
         covariance_history[index] = covariance
@@ -211,4 +222,8 @@ def run_filter(
     return {
         "state_estimates": state_history,
         "covariances": covariance_history,
+        "prior_state_estimates": prior_state_history,
+        "prior_covariances": prior_covariance_history,
+        "innovations": innovation_history,
+        "innovation_covariances": innovation_covariance_history,
     }

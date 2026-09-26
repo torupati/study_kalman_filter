@@ -27,6 +27,7 @@ import numpy as np
 
 from .demo import summarize_errors
 from .ekf import IDX_BAX, IDX_BAY, IDX_BG, IDX_VX, IDX_VY, IDX_X, IDX_Y, IDX_YAW, STATE_SIZE, EkfConfig, run_filter
+from .navlog import NavLog
 from .plotting import (
     create_output_timeseries_figure,
     create_state_timeseries_figure,
@@ -68,6 +69,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
         default=None,
         help="Optional ground-truth state CSV (from record_sensors.py --save-true-state) to compute errors against.",
     )
+    parser.add_argument("--save-log", type=Path, default=None, help="Also save a NavLog .npz here (input for animate.py)")
     return parser
 
 
@@ -305,6 +307,24 @@ def main() -> None:
         truth_states=truth_states,
     )
     output_timeseries_path = save_figure(output_timeseries_figure, args.output_dir / "ekf_output_timeseries_from_csv.png")
+
+    if args.save_log is not None:
+        nav_log = NavLog.from_run(
+            time=imu_times,
+            result=result,
+            gnss_measurements=gnss_measurements,
+            gnss_available=gnss_available,
+            config=config,
+            truth_states=truth_states,
+            imu_measurements=imu_measurements,
+            metadata={
+                "source": "csv",
+                "imu_csv": str(args.imu_csv),
+                "gnss_csv": str(args.gnss_csv),
+                "true_state_csv": None if args.true_state_csv is None else str(args.true_state_csv),
+            },
+        )
+        print(f"saved navigation log: {nav_log.save(args.save_log)}")
 
     run_config_path = args.output_dir / "run_config.json"
     save_run_config_json(run_config_path, config, initial_state, initial_covariance)

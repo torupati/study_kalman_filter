@@ -1,6 +1,6 @@
 import numpy as np
 
-from my_test_kf.x_generator import (
+from linear_kf.x_generator import (
     generate_true_pos_vel_acc_3d_type1,
     generte_true_pos_vel_1d_type1,
     kf_pv_1d_type1_condition,

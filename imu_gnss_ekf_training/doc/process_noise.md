@@ -14,7 +14,7 @@ approximation leaves out. The background is in
 [`preliminary_math.md`](preliminary_math.md) (§2 linear transformation of
 covariance, §3 white noise). The integrated-white-noise formulas used below are
 worked out and checked by Monte Carlo in
-[`my_test_kf/doc/process_nosie.md`](../../my_test_kf/doc/process_nosie.md).
+[`linear_kf/doc/process_nosie.md`](../../linear_kf/doc/process_nosie.md).
 
 Notation follows [`dynamics.md`](dynamics.md). The error state is
 $\delta\mathbf{x} = \mathbf{x} - \hat{\mathbf{x}}$, the noise vector is
@@ -170,7 +170,7 @@ $$
 
 which is the usual band-limited white-noise discretization at sample rate
 $f_s = 1/\Delta t$. It is the same `sig0 * randn() / sqrt(dt)` convention as in
-`my_test_kf/process_noise.py`. With this link, the position/velocity block of
+`linear_kf/process_noise.py`. With this link, the position/velocity block of
 §3.3 can be compared with the exact integrated-white-noise result
 ($\Phi(\tau)L = [\tau, 1]^T$ per axis):
 

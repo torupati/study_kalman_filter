@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from imu_gnss_ekf_training import EkfConfig, SimulatorConfig, run_filter, simulate_scenario
 from imu_gnss_ekf_training.ekf import (
@@ -92,3 +93,24 @@ def test_bias_jacobian_matches_finite_difference_signs():
 
     np.testing.assert_allclose(derivative_bax[[IDX_X, IDX_Y, IDX_VX, IDX_VY]], expected_bax, atol=1e-6)
     np.testing.assert_allclose(derivative_bay[[IDX_X, IDX_Y, IDX_VX, IDX_VY]], expected_bay, atol=1e-6)
+
+
+def test_stationary_scenario_stays_at_origin():
+    truth = simulate_scenario(SimulatorConfig(scenario="stationary", total_time=30.0, dt=0.1))["truth_states"]
+    np.testing.assert_array_equal(truth[:, [IDX_X, IDX_Y, IDX_VX, IDX_VY, IDX_YAW]], 0.0)
+
+
+def test_forward_back_scenario_returns_to_origin():
+    for dt in (0.1, 0.01):
+        truth = simulate_scenario(SimulatorConfig(scenario="forward_back", total_time=30.0, dt=dt))["truth_states"]
+        assert truth[:, IDX_X].max() == pytest.approx(5.0, abs=1e-6)
+        assert truth[:, IDX_X].min() == pytest.approx(0.0, abs=1e-6)
+        np.testing.assert_allclose(truth[-1, [IDX_X, IDX_Y, IDX_VX, IDX_VY]], 0.0, atol=1e-6)
+        np.testing.assert_array_equal(truth[:, IDX_YAW], 0.0)
+
+
+def test_circle_scenario_stays_on_circle():
+    truth = simulate_scenario(SimulatorConfig(scenario="circle", total_time=40.0, dt=0.01))["truth_states"]
+    distance_from_center = np.hypot(truth[:, IDX_X], truth[:, IDX_Y] - 10.0)
+    np.testing.assert_allclose(distance_from_center, 10.0, atol=0.05)
+    assert np.hypot(truth[-1, IDX_VX], truth[-1, IDX_VY]) == pytest.approx(2.0, abs=1e-3)

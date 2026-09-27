@@ -85,10 +85,57 @@ def truth_inputs_demo2(times: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     return np.column_stack((accel_x, accel_y)), yaw_rate
 
 
+def truth_inputs_stationary(times: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Vehicle stays at the origin: zero body-frame acceleration and yaw rate."""
+    return np.zeros((times.shape[0], 2)), np.zeros_like(times)
+
+
+def truth_inputs_forward_back(times: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Stand still, drive 5 m forward (+x), stop, reverse 5 m back to the origin, stand still.
+
+    Each 5 m leg is a bang-bang profile (accelerate, then decelerate to rest) with no
+    turning, so the vehicle reverses rather than turning around and yaw stays at 0.
+    """
+    leg_distance = 5.0
+    hold_time = 3.0
+    # Phase boundaries are kept on round times so they fall exactly on the sample grid;
+    # otherwise the discretized accel/decel halves don't cancel and the vehicle creeps.
+    half_leg_time = 2.5
+    accel_mag = leg_distance / half_leg_time**2  # accel+decel halves: a * t^2 = distance
+
+    t_forward = hold_time
+    t_backward = t_forward + 2.0 * half_leg_time + hold_time
+
+    t = times + 1e-9  # guard against k * dt landing just below a boundary
+    accel_x = np.zeros_like(times)
+    for start, sign in ((t_forward, 1.0), (t_backward, -1.0)):
+        accel_x[(t >= start) & (t < start + half_leg_time)] = sign * accel_mag
+        accel_x[(t >= start + half_leg_time) & (t < start + 2.0 * half_leg_time)] = -sign * accel_mag
+    return np.column_stack((accel_x, np.zeros_like(times))), np.zeros_like(times)
+
+
+def truth_inputs_circle(times: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Drive counter-clockwise on a 10 m radius circle centered at (0, 10), starting from rest.
+
+    Speed ramps up to 2 m/s and then stays constant. Staying on one circle with speed
+    v(t) needs body-frame acceleration (dv/dt, v^2 / R) and yaw rate v / R.
+    """
+    radius = 10.0
+    cruise_speed = 2.0
+    accel_mag = 0.5
+    speed = np.minimum(accel_mag * times, cruise_speed)
+    accel_x = np.where(accel_mag * times < cruise_speed, accel_mag, 0.0)
+    return np.column_stack((accel_x, speed**2 / radius)), speed / radius
+
+
 _TRUTH_INPUTS_BY_SCENARIO = {
     "demo1": truth_inputs_demo1,
     "demo2": truth_inputs_demo2,
+    "stationary": truth_inputs_stationary,
+    "forward_back": truth_inputs_forward_back,
+    "circle": truth_inputs_circle,
 }
+SCENARIOS = tuple(_TRUTH_INPUTS_BY_SCENARIO)
 
 
 def truth_inputs(times: np.ndarray, scenario: str = "demo1") -> tuple[np.ndarray, np.ndarray]:

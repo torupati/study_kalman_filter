@@ -9,12 +9,13 @@ import numpy as np
 from .ekf import IDX_BAX, IDX_BAY, IDX_BG, IDX_VX, IDX_VY, IDX_X, IDX_Y, IDX_YAW, EkfConfig, run_filter
 from .navlog import NavLog
 from .plotting import create_state_timeseries_figure, create_summary_figure, save_figure
-from .simulator import SimulatorConfig, simulate_scenario
+from .simulator import SCENARIOS, SimulatorConfig, simulate_scenario
 
 
 def build_argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run the 2D IMU/GNSS EKF training demo.")
     parser.add_argument("--output-dir", type=Path, default=Path("outputs/imu_gnss_ekf_training"))
+    parser.add_argument("--scenario", choices=SCENARIOS, default="demo1", help="Truth trajectory to simulate")
     parser.add_argument("--total-time", type=float, default=60.0)
     parser.add_argument("--dt", type=float, default=0.1)
     parser.add_argument("--gnss-period", type=float, default=0.5)
@@ -56,6 +57,7 @@ def main() -> None:
         gnss_period=args.gnss_period,
         gnss_dropout_probability=args.gnss_dropout,
         seed=args.seed,
+        scenario=args.scenario,
     )
     scenario = simulate_scenario(simulator_config)
     ekf_config = EkfConfig(

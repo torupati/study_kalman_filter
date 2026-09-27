@@ -95,6 +95,21 @@ Ellipses are drawn at a probability level (`--confidence`, default 95%): in 2D t
 `k = sqrt(-2 ln(1 - p))` sigma, so a "1-sigma" ellipse contains only ~39%. `.mp4` needs `ffmpeg`;
 `.gif` works without it.
 
+## Simulation scenarios
+
+`demo.py --scenario NAME` (and `record_sensors.py NAME`) selects the truth trajectory:
+
+| scenario | motion | suggested `--total-time` |
+|---|---|---|
+| `demo1` | smooth, continuously curving (default) | 60 |
+| `demo2` | accelerate, 30 m straight, half-circle turn, straight back, stop | 60 |
+| `stationary` | stays at the origin | 30 |
+| `forward_back` | hold 3 s, 5 m forward along +x, hold 3 s, reverse 5 m back to the origin (no turning) | 30 |
+| `circle` | from rest, speed ramps to 2 m/s on a counter-clockwise 10 m radius circle centered at (0, 10) | 40 |
+
+`./imu_gnss_ekf_training/run_scenario_movies.sh` runs `stationary`, `forward_back`, and `circle` and writes
+`outputs/scenarios/<scenario>/nav.mp4` for each (set `FPS=...` to trade smoothness for render time).
+
 ## Run the dropout experiment
 
 ```bash

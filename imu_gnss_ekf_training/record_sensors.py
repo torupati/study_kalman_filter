@@ -9,8 +9,10 @@ Scenarios
 ---------
     demo1       Smooth, continuously curving trajectory (the original demo).
     demo2       Accelerate, cruise straight for 30 m, half-circle turn, cruise back, stop.
-    line        Straight-line trajectory. Not implemented yet.
-    stationary  Vehicle stays put. Not implemented yet.
+    stationary    Vehicle stays put at the origin.
+    forward_back  Drive 5 m forward, stop, reverse 5 m back to the origin.
+    circle        Counter-clockwise 10 m radius circle at 2 m/s, starting from rest.
+    line          Straight-line trajectory. Not implemented yet.
 """
 from __future__ import annotations
 
@@ -28,7 +30,7 @@ GRAVITY_MPS2 = 9.80665
 IMU_SAMPLE_RATE_HZ = 100.0
 
 
-NOT_YET_IMPLEMENTED_SCENARIOS = ("line", "stationary")
+NOT_YET_IMPLEMENTED_SCENARIOS = ("line",)
 
 
 def build_argument_parser() -> argparse.ArgumentParser:
@@ -54,7 +56,9 @@ def build_argument_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("demo1", parents=[common], help="Smooth, continuously curving demo trajectory.")
     subparsers.add_parser("demo2", parents=[common], help="Straight 30 m out, half-circle turn, straight back.")
     subparsers.add_parser("line", parents=[common], help="Straight-line trajectory (not implemented yet).")
-    subparsers.add_parser("stationary", parents=[common], help="Vehicle stays put (not implemented yet).")
+    subparsers.add_parser("stationary", parents=[common], help="Vehicle stays put at the origin.")
+    subparsers.add_parser("forward_back", parents=[common], help="5 m forward, stop, reverse 5 m back to the origin.")
+    subparsers.add_parser("circle", parents=[common], help="10 m radius circle at 2 m/s, starting from rest.")
     return parser
 
 

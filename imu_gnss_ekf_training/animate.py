@@ -5,6 +5,7 @@ Usage
     uv run python -m imu_gnss_ekf_training.demo --save-log outputs/run1/nav_log.npz
     uv run python -m imu_gnss_ekf_training.animate outputs/run1/nav_log.npz --output outputs/run1/nav.mp4 --speed 2
     uv run python -m imu_gnss_ekf_training.animate outputs/run1/nav_log.npz --output outputs/run1/nav.gif --follow 20 --trail-seconds 15
+    uv run python -m imu_gnss_ekf_training.animate outputs/run1/nav_log.npz --view bias --output outputs/run1/bias.mp4
 """
 from __future__ import annotations
 
@@ -14,7 +15,7 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 
-from .animation import NavAnimator
+from .animation import BiasAnimator, NavAnimator
 from .navlog import NavLog
 
 logger = logging.getLogger(__name__)
@@ -23,7 +24,11 @@ logger = logging.getLogger(__name__)
 def build_argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Render an EKF navigation log as a 2D movie with covariance ellipses.")
     parser.add_argument("log", type=Path, help="NavLog .npz written by demo.py / run_ekf_from_csv.py --save-log")
-    parser.add_argument("--output", type=Path, default=None, help="Output .mp4 (ffmpeg) or .gif; default <log dir>/nav_animation.mp4")
+    parser.add_argument(
+        "--view", choices=("trajectory", "bias"), default="trajectory",
+        help="trajectory: 2D plane with covariance ellipses; bias: bias estimates vs. truth over time",
+    )
+    parser.add_argument("--output", type=Path, default=None, help="Output .mp4 (ffmpeg) or .gif; default <log dir>/<view>_animation.mp4")
     parser.add_argument("--fps", type=float, default=30.0)
     parser.add_argument("--speed", type=float, default=1.0, help="Playback speed relative to real time")
     parser.add_argument("--confidence", type=float, default=0.95, help="Probability mass inside drawn ellipses")
@@ -43,19 +48,23 @@ def main() -> None:
     plt.switch_backend("Agg")
 
     log = NavLog.load(args.log)
-    output = args.output if args.output is not None else args.log.parent / "nav_animation.mp4"
-    animator = NavAnimator(
-        log,
-        fps=args.fps,
-        speed=args.speed,
-        confidence=args.confidence,
-        trail_seconds=args.trail_seconds,
-        follow_half_width=args.follow,
-        show_prior=not args.no_prior,
-        gnss_hold_seconds=args.gnss_hold_seconds,
-        start_time=args.start,
-        end_time=args.end,
-    )
+    default_name = "nav_animation.mp4" if args.view == "trajectory" else "bias_animation.mp4"
+    output = args.output if args.output is not None else args.log.parent / default_name
+    if args.view == "bias":
+        animator = BiasAnimator(log, fps=args.fps, speed=args.speed, confidence=args.confidence, start_time=args.start, end_time=args.end)
+    else:
+        animator = NavAnimator(
+            log,
+            fps=args.fps,
+            speed=args.speed,
+            confidence=args.confidence,
+            trail_seconds=args.trail_seconds,
+            follow_half_width=args.follow,
+            show_prior=not args.no_prior,
+            gnss_hold_seconds=args.gnss_hold_seconds,
+            start_time=args.start,
+            end_time=args.end,
+        )
     num_frames = len(animator.frame_indices)
     logger.info("loaded %s: %d steps, %d GNSS fixes; rendering %d frames", args.log, log.num_steps, int(log.gnss_available.sum()), num_frames)
 

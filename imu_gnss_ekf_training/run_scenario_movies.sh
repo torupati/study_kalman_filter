@@ -1,6 +1,7 @@
 #!/bin/bash
-# Simulate the stationary / forward_back / circle scenarios, run the EKF, and render one movie each.
-# Outputs: outputs/scenarios/<scenario>/{nav_log.npz, nav.mp4, ekf_summary.png, ...}
+# Simulate the stationary / forward_back / circle scenarios, run the EKF, and render two movies each:
+# the 2D trajectory (nav.mp4) and the bias estimates vs. truth (bias.mp4).
+# Outputs: outputs/scenarios/<scenario>/{nav_log.npz, nav.mp4, bias.mp4, ekf_summary.png, ...}
 set -eu
 
 FPS="${FPS:-15}"
@@ -13,6 +14,8 @@ render() {
     --output-dir "${out}" --save-log "${out}/nav_log.npz"
   uv run python -m imu_gnss_ekf_training.animate "${out}/nav_log.npz" \
     --output "${out}/nav.mp4" --fps "${FPS}" --speed "${speed}"
+  uv run python -m imu_gnss_ekf_training.animate "${out}/nav_log.npz" --view bias \
+    --output "${out}/bias.mp4" --fps "${FPS}" --speed "${speed}"
 }
 
 # The three renders are independent, so run them in parallel.

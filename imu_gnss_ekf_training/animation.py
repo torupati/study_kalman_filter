@@ -1,8 +1,8 @@
-"""Animate a `NavLog` on the 2D plane: trajectory, covariance ellipses, and GNSS fixes.
+"""Animate a `NavLog`: the 2D trajectory with covariance ellipses, or the bias estimates.
 
-`NavAnimator` precomputes everything per log step in `__init__` (ellipse
-parameters, frame-to-step mapping, ...), creates each matplotlib artist once, and
-`update(frame)` only mutates those artists. It never runs the filter.
+`NavAnimator` (2D plane) and `BiasAnimator` (bias time series) precompute everything
+per log step in `__init__`, create each matplotlib artist once, and `update(frame)`
+only mutates those artists. Neither runs the filter.
 """
 from __future__ import annotations
 
@@ -11,11 +11,12 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.animation import FFMpegWriter, FuncAnimation, PillowWriter
-from matplotlib.patches import Ellipse
+from matplotlib.patches import Ellipse, Polygon
 
-from .ekf import IDX_X, IDX_Y, IDX_YAW
+from .ekf import IDX_BAX, IDX_BAY, IDX_BG, IDX_X, IDX_Y, IDX_YAW
 from .ellipse import covariance_ellipse, normal_1d_scale
 from .navlog import NavLog
+from .plotting import GRAVITY_MPS2
 
 POS = [IDX_X, IDX_Y]
 
@@ -42,7 +43,45 @@ def frame_indices(
     return indices
 
 
-class NavAnimator:
+class _Movie:
+    """Shared frame timing and movie output; subclasses build `figure` and implement `update`."""
+
+    figure: plt.Figure
+    fps: float
+    frame_indices: np.ndarray
+
+    def update(self, frame: int) -> list:
+        raise NotImplementedError
+
+    def _freeze_layout(self) -> None:
+        # Solve constrained layout once on the first frame, then freeze it: re-solving on every
+        # frame dominates render time (and would make the axes jitter as tick labels change).
+        self.update(0)
+        self.figure.canvas.draw()
+        self.figure.set_layout_engine("none")
+
+    def make_animation(self) -> FuncAnimation:
+        """Wrap `update` in a FuncAnimation (keep a reference to it until it is saved or shown)."""
+        return FuncAnimation(self.figure, self.update, frames=len(self.frame_indices), interval=1000.0 / self.fps, blit=False, repeat=False)
+
+    def save(self, path: str | Path, dpi: int = 100, progress_callback=None) -> Path:
+        """Write the movie; `.gif` uses Pillow, anything else (e.g. `.mp4`) uses ffmpeg."""
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.suffix.lower() == ".gif":
+            writer = PillowWriter(fps=self.fps)
+        else:
+            if not FFMpegWriter.isAvailable():
+                raise RuntimeError("ffmpeg not found; install it or write a .gif instead")
+            # H.264 + yuv420p for broad player support; that pixel format needs even frame dimensions.
+            width, height = self.figure.get_size_inches() * dpi
+            self.figure.set_size_inches(2 * round(width / 2) / dpi, 2 * round(height / 2) / dpi)
+            writer = FFMpegWriter(fps=self.fps, codec="libx264", extra_args=["-pix_fmt", "yuv420p"])
+        self.make_animation().save(path, writer=writer, dpi=dpi, progress_callback=progress_callback)
+        return path
+
+
+class NavAnimator(_Movie):
     def __init__(
         self,
         log: NavLog,
@@ -73,20 +112,12 @@ class NavAnimator:
         )
         self._build_plane()
         self._build_panel()
-        # Solve constrained layout once on the first frame, then freeze it: re-solving on every
-        # frame dominates render time (and would make the axes jitter as tick labels change).
-        self.update(0)
-        self.figure.canvas.draw()
-        self.figure.set_layout_engine("none")
+        self._freeze_layout()
         extent = self.ax.get_window_extent()
         self._box_ratio = extent.height / extent.width
         if not self.follow_half_width:
             self._set_view(0.5 * (self.fixed_limits[0] + self.fixed_limits[1]), 0.5 * (self.fixed_limits[1] - self.fixed_limits[0]))
         self.update(0)
-
-    def make_animation(self) -> FuncAnimation:
-        """Wrap `update` in a FuncAnimation (keep a reference to it until it is saved or shown)."""
-        return FuncAnimation(self.figure, self.update, frames=len(self.frame_indices), interval=1000.0 / self.fps, blit=False, repeat=False)
 
     # ------------------------------------------------------------------ setup
 
@@ -267,20 +298,94 @@ class NavAnimator:
             lines.append(f"|pos err| = {self.position_error[i]:.2f} m")
         return "\n".join(lines)
 
-    # ----------------------------------------------------------------- output
 
-    def save(self, path: str | Path, dpi: int = 100, progress_callback=None) -> Path:
-        """Write the movie; `.gif` uses Pillow, anything else (e.g. `.mp4`) uses ffmpeg."""
-        path = Path(path)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        if path.suffix.lower() == ".gif":
-            writer = PillowWriter(fps=self.fps)
-        else:
-            if not FFMpegWriter.isAvailable():
-                raise RuntimeError("ffmpeg not found; install it or write a .gif instead")
-            # H.264 + yuv420p for broad player support; that pixel format needs even frame dimensions.
-            width, height = self.figure.get_size_inches() * dpi
-            self.figure.set_size_inches(2 * round(width / 2) / dpi, 2 * round(height / 2) / dpi)
-            writer = FFMpegWriter(fps=self.fps, codec="libx264", extra_args=["-pix_fmt", "yuv420p"])
-        self.make_animation().save(path, writer=writer, dpi=dpi, progress_callback=progress_callback)
-        return path
+# (state index, panel title, unit, factor from SI to that unit)
+BIAS_PANELS = (
+    (IDX_BG, "gyro z bias", "deg/s", float(np.rad2deg(1.0))),
+    (IDX_BAX, "accel x bias", "mG", 1000.0 / GRAVITY_MPS2),
+    (IDX_BAY, "accel y bias", "mG", 1000.0 / GRAVITY_MPS2),
+)
+
+
+class BiasAnimator(_Movie):
+    """Bias estimates vs. truth over a fixed time axis: one panel each for gyro z, accel x, accel y.
+
+    Each panel reveals, up to the current time, the true bias, the estimate, and the
+    estimate's `confidence` band (+/- k sigma from the covariance diagonal).
+    """
+
+    def __init__(
+        self,
+        log: NavLog,
+        fps: float = 30.0,
+        speed: float = 1.0,
+        confidence: float = 0.95,
+        start_time: float | None = None,
+        end_time: float | None = None,
+        figsize: tuple[float, float] = (9.0, 8.0),
+    ):
+        self.log = log
+        self.fps = fps
+        self.confidence = confidence
+        self.frame_indices = frame_indices(log.time, fps, speed, start_time, end_time)
+        k = normal_1d_scale(confidence)
+        i0, i1 = self.frame_indices[0], self.frame_indices[-1]
+
+        self.figure, axes = plt.subplots(len(BIAS_PANELS), 1, figsize=figsize, sharex=True, constrained_layout=True)
+        self.title = self.figure.suptitle("")
+        self.panels = []
+        for ax, (index, title, unit, factor) in zip(axes, BIAS_PANELS):
+            estimate = factor * log.state_estimates[:, index]
+            half_band = k * factor * np.sqrt(np.clip(log.covariances[:, index, index], 0.0, None))
+            truth = factor * log.truth_states[:, index] if log.has_truth else None
+
+            band = Polygon(np.zeros((1, 2)), closed=True, facecolor="tab:blue", edgecolor="none", alpha=0.2,
+                           label=f"{100.0 * confidence:g}% band")
+            ax.add_patch(band)
+            truth_line = ax.plot([], [], color="tab:orange", linewidth=2.0, label="true")[0] if truth is not None else None
+            (estimate_line,) = ax.plot([], [], color="tab:blue", linewidth=1.5, label="estimate")
+            cursor = ax.axvline(log.time[i0], color="gray", linewidth=0.8)
+            text = ax.text(0.99, 0.95, "", transform=ax.transAxes, ha="right", va="top", family="monospace", fontsize=9,
+                           bbox={"facecolor": "white", "alpha": 0.8, "edgecolor": "none"})
+
+            # Fix the y range to the values themselves (plus a typical band width), not the
+            # very wide initial band, so convergence stays visible.
+            shown = [estimate[i0:i1 + 1]] + ([truth[i0:i1 + 1]] if truth is not None else [])
+            low = min(float(np.nanmin(v)) for v in shown)
+            high = max(float(np.nanmax(v)) for v in shown)
+            margin = max(0.1 * (high - low), float(np.nanmedian(half_band[i0:i1 + 1])), 1e-6)
+            ax.set_ylim(low - margin, high + margin)
+            ax.set_xlim(log.time[i0], log.time[i1])
+            ax.set_title(title, loc="left", fontsize=10)
+            ax.set_ylabel(f"[{unit}]")
+            ax.grid(True)
+            ax.legend(loc="upper left", fontsize=8, ncol=3)
+            self.panels.append(
+                {"estimate": estimate, "half_band": half_band, "truth": truth, "unit": unit,
+                 "band": band, "truth_line": truth_line, "estimate_line": estimate_line, "cursor": cursor, "text": text}
+            )
+        axes[-1].set_xlabel("time [s]")
+        self._freeze_layout()
+
+    def update(self, frame: int) -> list:
+        log = self.log
+        i0 = int(self.frame_indices[0])
+        i = int(self.frame_indices[frame])
+        t = log.time[i]
+        times = log.time[i0:i + 1]
+        self.title.set_text(f"Bias estimates   t = {t:6.2f} s")
+        for panel in self.panels:
+            estimate = panel["estimate"][i0:i + 1]
+            half_band = panel["half_band"][i0:i + 1]
+            panel["estimate_line"].set_data(times, estimate)
+            panel["band"].set_xy(np.concatenate([
+                np.column_stack([times, estimate + half_band]),
+                np.column_stack([times[::-1], (estimate - half_band)[::-1]]),
+            ]))
+            panel["cursor"].set_xdata([t, t])
+            line = f"est {panel['estimate'][i]:+8.2f} ± {panel['half_band'][i]:.2f}"
+            if panel["truth"] is not None:
+                panel["truth_line"].set_data(times, panel["truth"][i0:i + 1])
+                line += f"   true {panel['truth'][i]:+8.2f}"
+            panel["text"].set_text(f"{line} {panel['unit']}")
+        return []

@@ -45,6 +45,14 @@ def build_argument_parser() -> argparse.ArgumentParser:
     common.add_argument("--gnss-period", type=float, default=0.5)
     common.add_argument("--gnss-dropout", type=float, default=0.15)
     common.add_argument("--seed", type=int, default=7)
+    common.add_argument(
+        "--initial-accel-bias", type=float, nargs=2, metavar=("BX", "BY"), default=SimulatorConfig().initial_accel_bias,
+        help="True accelerometer bias at t=0, body frame [m/s^2]",
+    )
+    common.add_argument(
+        "--initial-gyro-bias-dps", type=float, default=float(np.rad2deg(SimulatorConfig().initial_gyro_bias)),
+        help="True gyro bias at t=0 [deg/s]",
+    )
     common.add_argument("--no-show", action="store_true", help="Save figures without displaying them.")
     common.add_argument(
         "--save-true-state",
@@ -155,6 +163,8 @@ def main() -> None:
         gnss_dropout_probability=args.gnss_dropout,
         seed=args.seed,
         scenario=args.scenario,
+        initial_accel_bias=tuple(args.initial_accel_bias),
+        initial_gyro_bias=float(np.deg2rad(args.initial_gyro_bias_dps)),
     )
     scenario = simulate_scenario(config)
 

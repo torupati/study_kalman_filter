@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 
 from imu_gnss_ekf_training import EkfConfig, SimulatorConfig, run_filter, simulate_scenario
-from imu_gnss_ekf_training.animation import NavAnimator, frame_indices
+from imu_gnss_ekf_training.animation import BIAS_PANELS, BiasAnimator, NavAnimator, frame_indices
 from imu_gnss_ekf_training.ekf import IDX_X, IDX_Y
 from imu_gnss_ekf_training.ellipse import chi2_2dof_scale, covariance_ellipse, mahalanobis_squared, normal_1d_scale
 from imu_gnss_ekf_training.navlog import NavLog
@@ -169,5 +169,28 @@ def test_animator_hides_gnss_during_outage():
         assert not animator.gnss_current.get_visible()
         assert not animator.prior_ellipse.get_visible()
         assert "outage" in animator.info_text.get_text()
+    finally:
+        plt.close(animator.figure)
+
+
+@pytest.mark.parametrize("with_truth", [True, False])
+def test_bias_animator_reveals_series_on_fixed_time_axis(with_truth):
+    log = make_log(with_truth=with_truth)
+    animator = BiasAnimator(log, fps=10, speed=2.0)
+    try:
+        axes = animator.figure.axes
+        assert len(axes) == len(BIAS_PANELS) == 3
+        frame = len(animator.frame_indices) // 2
+        animator.update(frame)
+        i = animator.frame_indices[frame]
+        for ax, panel, (index, _, _, factor) in zip(axes, animator.panels, BIAS_PANELS):
+            assert ax.get_xlim() == pytest.approx((log.time[0], log.time[-1]))  # fixed, full duration
+            times, values = panel["estimate_line"].get_data()
+            assert times[-1] == pytest.approx(log.time[i])
+            assert values[-1] == pytest.approx(factor * log.state_estimates[i, index])
+            assert (panel["truth_line"] is not None) == with_truth
+            if with_truth:
+                assert panel["truth_line"].get_data()[1][-1] == pytest.approx(factor * log.truth_states[i, index])
+        animator.figure.canvas.draw()
     finally:
         plt.close(animator.figure)

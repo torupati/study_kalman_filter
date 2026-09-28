@@ -51,8 +51,8 @@ The implementation in `ekf.py` discretizes this model, propagates the covariance
 - `experiments.py` – simple experiment runner for comparing GNSS dropout cases
 - `navlog.py` – `NavLog`: one EKF run (posterior/prior states and covariances, GNSS, innovations, optional truth) saved as `.npz`
 - `ellipse.py` – covariance → confidence-ellipse geometry (pure NumPy)
-- `animation.py` / `animate.py` – render a `NavLog` as a 2D movie with covariance ellipses and GNSS fixes
-- `doc/` – notes: [coordinate frames](doc/coordinate_frames.md), [process model](doc/dynamics.md), [process noise Q](doc/process_noise.md), [math background](doc/preliminary_math.md)
+- `animation.py` / `animate.py` – render a `NavLog` as a movie: the 2D trajectory with covariance ellipses and GNSS fixes (`--view trajectory`), or bias estimates vs. truth (`--view bias`)
+- `doc/` – notes: [coordinate frames](doc/coordinate_frames.md), [process model](doc/dynamics.md), [process noise Q](doc/process_noise.md), [math background](doc/preliminary_math.md), [bias estimation convergence by scenario](doc/bias_convergence.md)
 
 ## Run the demo
 
@@ -86,11 +86,14 @@ python -m imu_gnss_ekf_training.demo --save-log outputs/run1/nav_log.npz
 python -m imu_gnss_ekf_training.run_ekf_from_csv --save-log outputs/run1/nav_log.npz   # recorded CSV data
 python -m imu_gnss_ekf_training.animate outputs/run1/nav_log.npz --output outputs/run1/nav.mp4 --speed 2
 python -m imu_gnss_ekf_training.animate outputs/run1/nav_log.npz --output outputs/run1/nav.gif --follow 15 --trail-seconds 10
+python -m imu_gnss_ekf_training.animate outputs/run1/nav_log.npz --view bias --output outputs/run1/bias.mp4
 ```
 
 Each frame shows the truth/EKF trails, GNSS fixes, the posterior position ellipse (filled), the
 prior ellipse at the last GNSS update (dashed), the GNSS measurement-noise ellipse `R` (dotted), the
 heading with its yaw confidence fan, and a lower panel of ellipse semi-major axis vs. position error.
+`--view bias` instead draws gyro z, accel x, and accel y bias in three panels on a fixed time axis:
+true bias, estimate, and the estimate's confidence band.
 Ellipses are drawn at a probability level (`--confidence`, default 95%): in 2D the radius is
 `k = sqrt(-2 ln(1 - p))` sigma, so a "1-sigma" ellipse contains only ~39%. `.mp4` needs `ffmpeg`;
 `.gif` works without it.
@@ -108,7 +111,9 @@ Ellipses are drawn at a probability level (`--confidence`, default 95%): in 2D t
 | `circle` | from rest, speed ramps to 2 m/s on a counter-clockwise 10 m radius circle centered at (0, 10) | 40 |
 
 `./imu_gnss_ekf_training/run_scenario_movies.sh` runs `stationary`, `forward_back`, and `circle` and writes
-`outputs/scenarios/<scenario>/nav.mp4` for each (set `FPS=...` to trade smoothness for render time).
+`outputs/scenarios/<scenario>/nav.mp4` and `bias.mp4` for each (set `FPS=...` to trade smoothness for render time).
+The true initial bias is set with `--initial-accel-bias BX BY` [m/s²] and `--initial-gyro-bias-dps` [deg/s].
+See [doc/bias_convergence.md](doc/bias_convergence.md) for how each scenario lets the biases converge.
 
 ## Run the dropout experiment
 

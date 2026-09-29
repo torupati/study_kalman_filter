@@ -109,6 +109,13 @@ def test_forward_back_scenario_returns_to_origin():
         np.testing.assert_array_equal(truth[:, IDX_YAW], 0.0)
 
 
+def test_forward_back_distance_is_configurable():
+    config = SimulatorConfig(scenario="forward_back", total_time=30.0, dt=0.01, forward_back_distance=12.0)
+    truth = simulate_scenario(config)["truth_states"]
+    assert truth[:, IDX_X].max() == pytest.approx(12.0, abs=1e-6)
+    np.testing.assert_allclose(truth[-1, [IDX_X, IDX_Y, IDX_VX, IDX_VY]], 0.0, atol=1e-6)
+
+
 def test_circle_scenario_stays_on_circle():
     truth = simulate_scenario(SimulatorConfig(scenario="circle", total_time=40.0, dt=0.01))["truth_states"]
     distance_from_center = np.hypot(truth[:, IDX_X], truth[:, IDX_Y] - 10.0)

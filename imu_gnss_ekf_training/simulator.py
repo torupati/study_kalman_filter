@@ -11,6 +11,10 @@ from .ekf import IDX_BAX, IDX_BAY, IDX_BG, IDX_VX, IDX_VY, IDX_X, IDX_Y, IDX_YAW
 class SimulatorConfig:
     """Simulator parameters.
 
+    IMU white noise is given as a noise density, so the per-sample standard deviation
+    (`accel_noise_std`, `gyro_noise_std`) is `density / sqrt(dt)` and grows with the
+    sampling rate. The defaults give 0.12 m/s^2 and 0.015 rad/s at dt = 0.1 s.
+
     The bias walk values are random-walk noise densities, so the per-step
     increment standard deviation is `walk_std * sqrt(dt)`.
     """
@@ -18,8 +22,8 @@ class SimulatorConfig:
     total_time: float = 60.0
     dt: float = 0.1
     gnss_period: float = 0.5
-    accel_noise_std: float = 0.12
-    gyro_noise_std: float = 0.015
+    accel_noise_density: float = 0.12 * np.sqrt(0.1)  # [m/s^2/sqrt(Hz)]
+    gyro_noise_density: float = 0.015 * np.sqrt(0.1)  # [rad/s/sqrt(Hz)]
     gnss_position_std: float = 1.5
     gnss_velocity_std: float = 0.35
     accel_bias_walk_std: float = 0.01
@@ -29,6 +33,17 @@ class SimulatorConfig:
     initial_gyro_bias: float = 0.015
     seed: int = 7
     scenario: str = "demo1"
+    forward_back_distance: float = 5.0
+
+    @property
+    def accel_noise_std(self) -> float:
+        """Per-sample accelerometer noise std [m/s^2] at this `dt`."""
+        return float(self.accel_noise_density / np.sqrt(self.dt))
+
+    @property
+    def gyro_noise_std(self) -> float:
+        """Per-sample gyro noise std [rad/s] at this `dt`."""
+        return float(self.gyro_noise_density / np.sqrt(self.dt))
 
 
 def rotation_matrix(yaw: float) -> np.ndarray:
@@ -90,13 +105,13 @@ def truth_inputs_stationary(times: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     return np.zeros((times.shape[0], 2)), np.zeros_like(times)
 
 
-def truth_inputs_forward_back(times: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Stand still, drive 5 m forward (+x), stop, reverse 5 m back to the origin, stand still.
+def truth_inputs_forward_back(times: np.ndarray, leg_distance: float = 5.0) -> tuple[np.ndarray, np.ndarray]:
+    """Stand still, drive `leg_distance` [m] forward (+x), stop, reverse back to the origin, stand still.
 
-    Each 5 m leg is a bang-bang profile (accelerate, then decelerate to rest) with no
+    Each leg is a bang-bang profile (accelerate, then decelerate to rest) with no
     turning, so the vehicle reverses rather than turning around and yaw stays at 0.
+    The leg timing is fixed, so the acceleration scales with `leg_distance`.
     """
-    leg_distance = 5.0
     hold_time = 3.0
     # Phase boundaries are kept on round times so they fall exactly on the sample grid;
     # otherwise the discretized accel/decel halves don't cancel and the vehicle creeps.
@@ -138,13 +153,16 @@ _TRUTH_INPUTS_BY_SCENARIO = {
 SCENARIOS = tuple(_TRUTH_INPUTS_BY_SCENARIO)
 
 
-def truth_inputs(times: np.ndarray, scenario: str = "demo1") -> tuple[np.ndarray, np.ndarray]:
-    """Generate body-frame acceleration/yaw-rate commands for the given scenario."""
+def truth_inputs(times: np.ndarray, scenario: str = "demo1", **scenario_params) -> tuple[np.ndarray, np.ndarray]:
+    """Generate body-frame acceleration/yaw-rate commands for the given scenario.
+
+    `scenario_params` are forwarded to the scenario's `truth_inputs_*` function.
+    """
     try:
         generator = _TRUTH_INPUTS_BY_SCENARIO[scenario]
     except KeyError:
         raise ValueError(f"Unknown scenario {scenario!r}; choose from {sorted(_TRUTH_INPUTS_BY_SCENARIO)}.") from None
-    return generator(times)
+    return generator(times, **scenario_params)
 
 
 def simulate_scenario(config: SimulatorConfig | None = None) -> dict[str, np.ndarray | float]:
@@ -155,7 +173,8 @@ def simulate_scenario(config: SimulatorConfig | None = None) -> dict[str, np.nda
     rng = np.random.default_rng(config.seed)
     num_steps = int(np.floor(config.total_time / config.dt)) + 1
     times = np.arange(num_steps, dtype=float) * config.dt
-    true_accel_body, true_yaw_rate = truth_inputs(times, config.scenario)
+    scenario_params = {"leg_distance": config.forward_back_distance} if config.scenario == "forward_back" else {}
+    true_accel_body, true_yaw_rate = truth_inputs(times, config.scenario, **scenario_params)
 
     states = np.zeros((num_steps, STATE_SIZE), dtype=float)
     accel_biases = np.zeros((num_steps, 2), dtype=float)

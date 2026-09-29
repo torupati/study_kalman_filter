@@ -8,7 +8,8 @@ import numpy as np
 
 from .ekf import IDX_BAX, IDX_BAY, IDX_BG, IDX_VX, IDX_VY, IDX_X, IDX_Y, IDX_YAW, EkfConfig, run_filter
 from .navlog import NavLog
-from .plotting import create_state_timeseries_figure, create_summary_figure, save_figure
+from .plotting import create_bias_timeseries_figure, create_state_timeseries_figure, create_summary_figure, save_figure
+from .run_conditions import save_run_conditions
 from .simulator import SCENARIOS, SimulatorConfig, simulate_scenario
 
 
@@ -21,6 +22,18 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--gnss-period", type=float, default=0.5)
     parser.add_argument("--gnss-dropout", type=float, default=0.15)
     parser.add_argument("--seed", type=int, default=7)
+    parser.add_argument(
+        "--accel-noise-density", type=float, default=SimulatorConfig().accel_noise_density,
+        help="Simulated accelerometer white noise density [m/s^2/sqrt(Hz)]; per-sample std = density / sqrt(dt)",
+    )
+    parser.add_argument(
+        "--gyro-noise-density", type=float, default=SimulatorConfig().gyro_noise_density,
+        help="Simulated gyro white noise density [rad/s/sqrt(Hz)]; per-sample std = density / sqrt(dt)",
+    )
+    parser.add_argument(
+        "--forward-back-distance", type=float, default=SimulatorConfig().forward_back_distance,
+        help="One-way travel distance of the forward_back scenario [m]",
+    )
     parser.add_argument(
         "--initial-accel-bias", type=float, nargs=2, metavar=("BX", "BY"), default=SimulatorConfig().initial_accel_bias,
         help="True accelerometer bias at t=0, body frame [m/s^2]",
@@ -66,6 +79,9 @@ def main() -> None:
         gnss_dropout_probability=args.gnss_dropout,
         seed=args.seed,
         scenario=args.scenario,
+        forward_back_distance=args.forward_back_distance,
+        accel_noise_density=args.accel_noise_density,
+        gyro_noise_density=args.gyro_noise_density,
         initial_accel_bias=tuple(args.initial_accel_bias),
         initial_gyro_bias=float(np.deg2rad(args.initial_gyro_bias_dps)),
     )
@@ -78,6 +94,9 @@ def main() -> None:
         gnss_position_std=simulator_config.gnss_position_std,
         gnss_velocity_std=simulator_config.gnss_velocity_std,
     )
+    conditions_path = save_run_conditions(args.output_dir / "run_conditions.toml", simulator_config, ekf_config)
+    print(f"saved run conditions: {conditions_path}")
+
     result = run_filter(
         imu_measurements=np.asarray(scenario["imu_measurements"]),
         gnss_measurements=np.asarray(scenario["gnss_measurements"]),
@@ -118,6 +137,15 @@ def main() -> None:
     )
     state_output_path = save_figure(state_figure, args.output_dir / "ekf_state_timeseries.png")
     print(f"saved figure: {state_output_path}")
+
+    bias_figure = create_bias_timeseries_figure(
+        time=np.asarray(scenario["time"]),
+        state_estimates=np.asarray(result["state_estimates"]),
+        covariances=np.asarray(result["covariances"]),
+        truth_states=np.asarray(scenario["truth_states"]),
+    )
+    bias_output_path = save_figure(bias_figure, args.output_dir / "ekf_bias_timeseries.png")
+    print(f"saved figure: {bias_output_path}")
 
     for key, value in summarize_errors(np.asarray(scenario["truth_states"]), np.asarray(result["state_estimates"])).items():
         print(f"{key}: {value:.6f}")

@@ -191,7 +191,10 @@ Two practical consequences:
 - **Converting a datasheet value.** With a noise density $N$ in (m/s²)/√Hz
   and the filter running at $\Delta t$, use `accel_noise_std` $= N/\sqrt{\Delta t}$.
   The same applies to the gyro. For the bias walks, no conversion is needed:
-  they are already densities (§3.1).
+  they are already densities (§3.1). The simulator (`SimulatorConfig`) takes
+  `accel_noise_density` / `gyro_noise_density` and does this conversion itself
+  (its `accel_noise_std` / `gyro_noise_std` properties), which is what `demo.py`
+  passes on to `EkfConfig`.
 - **Changing `dt` changes the noise.** `accel_noise_std` is tied to the sample
   rate. If you change `dt` but keep the same `accel_noise_std`, the equivalent
   PSD $q = \sigma_a^2 \Delta t$ changes too. The bias-walk parameters do not

@@ -183,6 +183,44 @@ def create_state_timeseries_figure(
     return figure
 
 
+def create_bias_timeseries_figure(
+    time: np.ndarray,
+    state_estimates: np.ndarray,
+    covariances: np.ndarray | None = None,
+    truth_states: np.ndarray | None = None,
+):
+    """Bias estimates (accel x, accel y, gyro z) as time series, one axis each.
+
+    `covariances` is optional: when given, a ±1 std band is drawn around each estimate.
+    `truth_states` is optional: when given, the true bias is overlaid on every panel.
+    """
+    panels = [
+        (IDX_BAX, "accel_x bias", "bias [G]", 1.0 / GRAVITY_MPS2),
+        (IDX_BAY, "accel_y bias", "bias [G]", 1.0 / GRAVITY_MPS2),
+        (IDX_BG, "gyro_z bias", "bias [deg/s]", np.rad2deg(1.0)),
+    ]
+    std = np.sqrt(np.diagonal(covariances, axis1=1, axis2=2)) if covariances is not None else None
+
+    figure, axes = plt.subplots(len(panels), 1, figsize=(11, 10), sharex=True, constrained_layout=True)
+    figure.suptitle("EKF bias estimates")
+
+    for ax, (index, title, ylabel, scale) in zip(axes, panels, strict=True):
+        estimate = state_estimates[:, index] * scale
+        if truth_states is not None:
+            ax.plot(time, truth_states[:, index] * scale, label="truth", color="tab:orange", linewidth=2.0)
+        ax.plot(time, estimate, label="ekf", color="tab:blue")
+        if std is not None:
+            band = std[:, index] * scale
+            ax.fill_between(time, estimate - band, estimate + band, alpha=0.25, color="tab:blue", label="±1 std")
+        ax.set_title(title)
+        ax.set_ylabel(ylabel)
+        ax.legend()
+        ax.grid(True)
+    axes[-1].set_xlabel("time [s]")
+
+    return figure
+
+
 def create_trajectory_figure(
     state_estimates: np.ndarray,
     gnss_measurements: np.ndarray,

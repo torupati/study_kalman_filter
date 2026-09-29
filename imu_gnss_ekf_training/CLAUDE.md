@@ -7,8 +7,7 @@
 
 ### Coding
 
-- For CUI program, use argparse to set commandline options.
-- Use logging to display and save log message. print is only used for debuging.
-- For plotting use deg/s as rotation speed unit. degree for rotation angle. G (gravity) as accleromation unit. m/s as velocity unit.
-- Use numpy for conversion between radian and dgrees.
-- 
+- For CLI programs, use argparse to set command-line options.
+- Use logging to display and save log messages. `print` is only used for debugging.
+- For plotting, use deg/s for rotation-rate units, degrees for angles, G (gravity) for acceleration units, and m/s for velocity units.
+- Use NumPy for conversion between radians and degrees.

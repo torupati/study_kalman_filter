@@ -1,6 +1,6 @@
 # Sensor Simulation for 2D Navigation
 
-Here we suppose to have car robot which have inertial sensor and GNSS on it. We simulate its sensor with ground true position, velocity, attitude(here only yaw is used) and sensor biases.
+Here we assume a car-like robot with an IMU and GNSS. We simulate sensor observations from the ground-truth position, velocity, attitude (yaw only), and sensor biases.
 
 ```bash
 uv run python -m imu_gnss_ekf_training.record_sensors demo1

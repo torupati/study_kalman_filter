@@ -4,6 +4,7 @@ set -eu
 mkdir -p ./outputs/demo1
 
 uv run python -m imu_gnss_ekf_training.record_sensors \
+  demo1 \
   --output-dir ./outputs/demo1/ \
   --dt 0.01 \
   --gnss-period 2.0 \

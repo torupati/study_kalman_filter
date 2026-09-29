@@ -381,3 +381,77 @@ def save_figure(figure, output_path: str | Path) -> Path:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     figure.savefig(output_path, dpi=150)
     return output_path
+
+
+def _draw_heading(ax, x: float, y: float, yaw: float, length: float, color: str, label: str) -> None:
+    ax.annotate(
+        "", xy=(x + length * np.cos(yaw), y + length * np.sin(yaw)), xytext=(x, y),
+        arrowprops={"arrowstyle": "-|>", "color": color, "linewidth": 2.0},
+    )
+    ax.plot(x, y, marker="o", markersize=8, color=color, linestyle="none", label=label)
+
+
+def create_frame_alignment_figure(
+    time: np.ndarray,
+    truth_states: np.ndarray,
+    state_estimates: np.ndarray,
+    alignment,
+    gnss_measurements: np.ndarray | None = None,
+    gnss_available: np.ndarray | None = None,
+):
+    """Nav-frame estimate vs world-frame truth, before and after mapping with the start pose.
+
+    `alignment` is an `alignment.TrajectoryAlignment`. Left: the raw estimate in its own
+    (start-anchored) frame over the world-frame truth, with both start poses. Middle: the
+    estimate mapped into the world with the true start pose. Right: position error norm
+    over time for both.
+    """
+    truth_xy = truth_states[:, [IDX_X, IDX_Y]]
+    estimate_xy = state_estimates[:, [IDX_X, IDX_Y]]
+    span = float(np.ptp(np.vstack((truth_xy, estimate_xy)), axis=0).max())
+    arrow = max(1.0, 0.15 * span)
+
+    figure, axes = plt.subplots(1, 3, figsize=(18, 6), constrained_layout=True)
+    fitted_deg = np.rad2deg(alignment.fitted.yaw)
+    anchor_deg = np.rad2deg(alignment.anchor.yaw)
+    figure.suptitle(
+        f"Navigation frame vs world: best-fit rotation {fitted_deg:.2f}° "
+        f"(true start heading {anchor_deg:.2f}°), best-fit ATE {alignment.ate_fitted_rmse:.2f} m"
+    )
+
+    ax = axes[0]
+    ax.plot(truth_xy[:, 0], truth_xy[:, 1], color="tab:orange", linewidth=2.0, label="truth (world frame)")
+    if gnss_measurements is not None and gnss_available is not None:
+        gnss_xy = gnss_measurements[gnss_available, :2]
+        ax.scatter(gnss_xy[:, 0], gnss_xy[:, 1], s=8, color="tab:red", alpha=0.3, label="gnss (not fused)")
+    ax.plot(estimate_xy[:, 0], estimate_xy[:, 1], color="tab:blue", linewidth=1.5, label="ekf (nav frame)")
+    _draw_heading(ax, *truth_xy[0], truth_states[0, IDX_YAW], arrow, "tab:orange", "true start pose")
+    _draw_heading(ax, *estimate_xy[0], state_estimates[0, IDX_YAW], arrow, "tab:blue", "nav frame origin")
+    ax.set_title("As estimated")
+
+    ax = axes[1]
+    ax.plot(truth_xy[:, 0], truth_xy[:, 1], color="tab:orange", linewidth=2.0, label="truth")
+    ax.plot(alignment.anchored_xy[:, 0], alignment.anchored_xy[:, 1], color="tab:blue", linewidth=1.5,
+            label="ekf mapped by true start pose")
+    ax.set_title(f"Mapped with the true start pose: ATE {alignment.ate_anchored_rmse:.2f} m, "
+                 f"yaw RMSE {np.rad2deg(alignment.yaw_anchored_rmse):.2f}°")
+
+    for ax in axes[:2]:
+        ax.set_xlabel("x [m]")
+        ax.set_ylabel("y [m]")
+        ax.axis("equal")
+        ax.legend()
+        ax.grid(True)
+
+    ax = axes[2]
+    ax.plot(time, np.linalg.norm(estimate_xy - truth_xy, axis=1), color="tab:gray", label="as estimated")
+    ax.plot(time, np.linalg.norm(alignment.anchored_xy - truth_xy, axis=1), color="tab:blue",
+            label="mapped by true start pose")
+    ax.set_title("Position error")
+    ax.set_xlabel("time [s]")
+    ax.set_ylabel("error [m]")
+    ax.set_yscale("log")
+    ax.set_ylim(bottom=1e-2)  # both errors start at exactly 0
+    ax.legend()
+    ax.grid(True)
+    return figure

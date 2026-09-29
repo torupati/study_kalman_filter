@@ -34,6 +34,14 @@ SIMULATOR_COMMENTS = {
     "gnss_velocity_std": "[m/s] GNSS velocity noise",
     "seed": "random seed",
     "forward_back_distance": "[m] one-way travel distance (forward_back scenario only)",
+    "initial_position": "[m] true start position in the world frame (x, y)",
+    "initial_yaw": "[rad] true start heading in the world frame",
+    "vo_period": "[s] visual odometry frame period",
+    "vo_translation_std": "[m] VO translation noise per frame (floor)",
+    "vo_translation_std_per_m": "[m/m] VO translation noise per meter moved",
+    "vo_yaw_std": "[rad] VO yaw noise per frame (floor)",
+    "vo_yaw_std_per_rad": "[rad/rad] VO yaw noise per radian turned",
+    "vo_dropout_probability": "probability that a VO frame loses tracking",
 }
 
 EKF_COMMENTS = {
@@ -125,4 +133,6 @@ def load_run_conditions(path: str | Path) -> tuple[SimulatorConfig, EkfConfig]:
         if std is not None:
             simulator_values.setdefault(f"{kind}_noise_density", std * np.sqrt(dt))
     simulator_values["initial_accel_bias"] = tuple(simulator_values["initial_accel_bias"])
+    if "initial_position" in simulator_values:
+        simulator_values["initial_position"] = tuple(simulator_values["initial_position"])
     return SimulatorConfig(**simulator_values), EkfConfig(**data["ekf"])

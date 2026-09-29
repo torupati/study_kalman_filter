@@ -35,7 +35,7 @@ NOT_YET_IMPLEMENTED_SCENARIOS = ("line",)
 
 def build_argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Simulate and record IMU/GNSS observations as CSV, then plot them."
+        description="Simulate and record IMU/GNSS/visual-odometry observations as CSV, then plot them."
     )
 
     common = argparse.ArgumentParser(add_help=False)
@@ -53,6 +53,15 @@ def build_argument_parser() -> argparse.ArgumentParser:
         "--initial-gyro-bias-dps", type=float, default=float(np.rad2deg(SimulatorConfig().initial_gyro_bias)),
         help="True gyro bias at t=0 [deg/s]",
     )
+    common.add_argument(
+        "--initial-pose", type=float, nargs=3, metavar=("X", "Y", "YAW_DEG"), default=(0.0, 0.0, 0.0),
+        help="True start pose in the world frame [m, m, deg]",
+    )
+    common.add_argument("--vo-period", type=float, default=SimulatorConfig().vo_period, help="VO frame period [s]")
+    common.add_argument(
+        "--vo-dropout", type=float, default=SimulatorConfig().vo_dropout_probability,
+        help="Probability that a VO frame loses tracking",
+    )
     common.add_argument("--no-show", action="store_true", help="Save figures without displaying them.")
     common.add_argument(
         "--save-true-state",
@@ -64,8 +73,8 @@ def build_argument_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("demo1", parents=[common], help="Smooth, continuously curving demo trajectory.")
     subparsers.add_parser("demo2", parents=[common], help="Straight 30 m out, half-circle turn, straight back.")
     subparsers.add_parser("line", parents=[common], help="Straight-line trajectory (not implemented yet).")
-    subparsers.add_parser("stationary", parents=[common], help="Vehicle stays put at the origin.")
-    subparsers.add_parser("forward_back", parents=[common], help="5 m forward, stop, reverse 5 m back to the origin.")
+    subparsers.add_parser("stationary", parents=[common], help="Vehicle stays put at its start pose.")
+    subparsers.add_parser("forward_back", parents=[common], help="5 m forward, stop, reverse 5 m back to the start.")
     subparsers.add_parser("circle", parents=[common], help="10 m radius circle at 2 m/s, starting from rest.")
     return parser
 
@@ -89,6 +98,18 @@ def write_gnss_csv(path: Path, times: np.ndarray, gnss: np.ndarray, available: n
         for t, row, avail in zip(times, gnss, available):
             if avail:
                 writer.writerow([f"{t:.6f}", f"{row[0]:.8f}", f"{row[1]:.8f}", f"{row[2]:.8f}", f"{row[3]:.8f}"])
+
+
+def write_vo_csv(path: Path, times: np.ndarray, scenario: dict) -> None:
+    """Write VO delta poses: frame i -> frame j, [dx, dy] in frame i's body axes, dyaw, and their stds."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["time_from_s", "time_to_s", "dx_body_m", "dy_body_m", "dyaw_rad", "std_dx_m", "std_dy_m", "std_dyaw_rad"])
+        columns = ("vo_from_index", "vo_to_index", "vo_delta_measurements", "vo_covariances")
+        for i, j, delta, covariance in zip(*(scenario[name] for name in columns), strict=True):
+            stds = np.sqrt(np.diag(covariance))
+            writer.writerow([f"{times[i]:.6f}", f"{times[j]:.6f}", *(f"{v:.8f}" for v in delta), *(f"{v:.8f}" for v in stds)])
 
 
 def write_true_state_csv(path: Path, times: np.ndarray, truth_states: np.ndarray) -> None:
@@ -165,6 +186,10 @@ def main() -> None:
         scenario=args.scenario,
         initial_accel_bias=tuple(args.initial_accel_bias),
         initial_gyro_bias=float(np.deg2rad(args.initial_gyro_bias_dps)),
+        initial_position=(args.initial_pose[0], args.initial_pose[1]),
+        initial_yaw=float(np.deg2rad(args.initial_pose[2])),
+        vo_period=args.vo_period,
+        vo_dropout_probability=args.vo_dropout,
     )
     scenario = simulate_scenario(config)
 
@@ -179,6 +204,9 @@ def main() -> None:
     write_gnss_csv(gnss_path, times, gnss, available)
     print(f"IMU CSV  : {imu_path}  ({len(times)} rows)")
     print(f"GNSS CSV : {gnss_path}  ({available.sum()} rows)")
+    vo_path = args.output_dir / "vo_observations.csv"
+    write_vo_csv(vo_path, times, scenario)
+    print(f"VO CSV   : {vo_path}  ({len(scenario['vo_to_index'])} rows)")
 
     if args.save_true_state:
         truth_states: np.ndarray = np.asarray(scenario["truth_states"])

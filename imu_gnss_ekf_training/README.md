@@ -52,7 +52,7 @@ The implementation in `ekf.py` discretizes this model, propagates the covariance
 - `navlog.py` – `NavLog`: one EKF run (posterior/prior states and covariances, GNSS, innovations, optional truth) saved as `.npz`
 - `ellipse.py` – covariance → confidence-ellipse geometry (pure NumPy)
 - `animation.py` / `animate.py` – render a `NavLog` as a movie: the 2D trajectory with covariance ellipses and GNSS fixes (`--view trajectory`), or bias estimates vs. truth (`--view bias`)
-- `doc/` – notes: [coordinate frames](doc/coordinate_frames.md), [process model](doc/dynamics.md), [process noise Q](doc/process_noise.md), [math background](doc/preliminary_math.md), [bias estimation convergence by scenario](doc/bias_convergence.md)
+- `doc/` – notes: [coordinate frames](doc/coordinate_frames.md), [process model](doc/dynamics.md), [process noise Q](doc/process_noise.md), [math background](doc/preliminary_math.md), [bias estimation convergence by scenario](doc/bias_convergence.md), [visual odometry (delta pose) simulation](doc/visual_odometry.md), [IMU + VO navigation without GNSS](doc/vo_only_navigation.md)
 
 ## Run the demo
 
@@ -66,6 +66,8 @@ Optional arguments:
 
 ```bash
 python -m imu_gnss_ekf_training.demo --total-time 90 --gnss-dropout 0.35 --output-dir outputs/demo_run
+python -m imu_gnss_ekf_training.demo --scenario circle --dt 0.01 --use-vo   # also fuse 10 fps visual odometry
+python -m imu_gnss_ekf_training.demo --scenario demo2 --dt 0.01 --use-vo --no-gnss-update --initial-pose 30 -20 40   # IMU+VO only; see doc/visual_odometry.md §8
 ```
 
 The demo prints RMSE metrics and saves `ekf_summary.png` with:

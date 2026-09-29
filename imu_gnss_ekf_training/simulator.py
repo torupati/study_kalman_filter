@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .ekf import IDX_BAX, IDX_BAY, IDX_BG, IDX_VX, IDX_VY, IDX_X, IDX_Y, IDX_YAW, STATE_SIZE
+from .ekf import IDX_BAX, IDX_BAY, IDX_BG, IDX_VX, IDX_VY, IDX_X, IDX_Y, IDX_YAW, STATE_SIZE, wrap_angle
 
 
 @dataclass(frozen=True)
@@ -17,6 +17,17 @@ class SimulatorConfig:
 
     The bias walk values are random-walk noise densities, so the per-step
     increment standard deviation is `walk_std * sqrt(dt)`.
+
+    The vehicle starts at rest at `initial_position` [m] with heading `initial_yaw`
+    [rad] in the world (navigation) frame; the scenarios describe motion relative
+    to that start pose. Everything measured in the body frame (IMU, VO) is the same
+    for any start pose, while GNSS sees the world-frame trajectory.
+
+    Visual odometry (`vo_*`) mimics a visual/LiDAR SLAM front end: every `vo_period`
+    it reports the SE(2) relative pose since the last tracked frame, in that frame's
+    body axes. Its noise std is a per-frame floor plus a part proportional to the
+    motion (`vo_translation_std + vo_translation_std_per_m * distance`, likewise for
+    yaw). See `doc/visual_odometry.md`.
     """
 
     total_time: float = 60.0
@@ -34,6 +45,14 @@ class SimulatorConfig:
     seed: int = 7
     scenario: str = "demo1"
     forward_back_distance: float = 5.0
+    initial_position: tuple[float, float] = (0.0, 0.0)
+    initial_yaw: float = 0.0
+    vo_period: float = 0.1
+    vo_translation_std: float = 0.005  # [m] per-frame floor
+    vo_translation_std_per_m: float = 0.01  # [m/m] fraction of the distance moved
+    vo_yaw_std: float = float(np.deg2rad(0.05))  # [rad] per-frame floor
+    vo_yaw_std_per_rad: float = 0.01  # [rad/rad] fraction of the rotation
+    vo_dropout_probability: float = 0.0
 
     @property
     def accel_noise_std(self) -> float:
@@ -50,6 +69,36 @@ def rotation_matrix(yaw: float) -> np.ndarray:
     c = np.cos(yaw)
     s = np.sin(yaw)
     return np.array([[c, -s], [s, c]], dtype=float)
+
+
+def relative_pose_2d(pose_from: np.ndarray, pose_to: np.ndarray) -> np.ndarray:
+    """SE(2) pose of `pose_to` seen from `pose_from`: `[R(yaw_from)^T (p_to - p_from), wrap(yaw_to - yaw_from)]`.
+
+    Poses are `[x, y, yaw]` rows; leading dimensions broadcast.
+    """
+    pose_from = np.asarray(pose_from, dtype=float)
+    pose_to = np.asarray(pose_to, dtype=float)
+    dx = pose_to[..., 0] - pose_from[..., 0]
+    dy = pose_to[..., 1] - pose_from[..., 1]
+    c = np.cos(pose_from[..., 2])
+    s = np.sin(pose_from[..., 2])
+    return np.stack((c * dx + s * dy, -s * dx + c * dy, wrap_angle(pose_to[..., 2] - pose_from[..., 2])), axis=-1)
+
+
+def compose_pose_2d(pose: np.ndarray, delta: np.ndarray) -> np.ndarray:
+    """Apply a body-frame relative pose `delta` to `pose` (inverse of `relative_pose_2d`)."""
+    pose = np.asarray(pose, dtype=float)
+    delta = np.asarray(delta, dtype=float)
+    c = np.cos(pose[..., 2])
+    s = np.sin(pose[..., 2])
+    return np.stack(
+        (
+            pose[..., 0] + c * delta[..., 0] - s * delta[..., 1],
+            pose[..., 1] + s * delta[..., 0] + c * delta[..., 1],
+            wrap_angle(pose[..., 2] + delta[..., 2]),
+        ),
+        axis=-1,
+    )
 
 
 def truth_inputs_demo1(times: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -101,12 +150,12 @@ def truth_inputs_demo2(times: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
 
 
 def truth_inputs_stationary(times: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Vehicle stays at the origin: zero body-frame acceleration and yaw rate."""
+    """Vehicle stays at its start pose: zero body-frame acceleration and yaw rate."""
     return np.zeros((times.shape[0], 2)), np.zeros_like(times)
 
 
 def truth_inputs_forward_back(times: np.ndarray, leg_distance: float = 5.0) -> tuple[np.ndarray, np.ndarray]:
-    """Stand still, drive `leg_distance` [m] forward (+x), stop, reverse back to the origin, stand still.
+    """Stand still, drive `leg_distance` [m] forward, stop, reverse back to the start, stand still.
 
     Each leg is a bang-bang profile (accelerate, then decelerate to rest) with no
     turning, so the vehicle reverses rather than turning around and yaw stays at 0.
@@ -130,7 +179,7 @@ def truth_inputs_forward_back(times: np.ndarray, leg_distance: float = 5.0) -> t
 
 
 def truth_inputs_circle(times: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Drive counter-clockwise on a 10 m radius circle centered at (0, 10), starting from rest.
+    """Drive counter-clockwise on a 10 m radius circle centered 10 m to the left of the start, starting from rest.
 
     Speed ramps up to 2 m/s and then stays constant. Staying on one circle with speed
     v(t) needs body-frame acceleration (dv/dt, v^2 / R) and yaw rate v / R.
@@ -177,6 +226,8 @@ def simulate_scenario(config: SimulatorConfig | None = None) -> dict[str, np.nda
     true_accel_body, true_yaw_rate = truth_inputs(times, config.scenario, **scenario_params)
 
     states = np.zeros((num_steps, STATE_SIZE), dtype=float)
+    states[0, [IDX_X, IDX_Y]] = config.initial_position
+    states[0, IDX_YAW] = wrap_angle(config.initial_yaw)
     accel_biases = np.zeros((num_steps, 2), dtype=float)
     gyro_biases = np.zeros(num_steps, dtype=float)
     accel_biases[0] = np.array(config.initial_accel_bias, dtype=float)
@@ -224,6 +275,9 @@ def simulate_scenario(config: SimulatorConfig | None = None) -> dict[str, np.nda
     )
     gnss_measurements[~gnss_available] = np.nan
 
+    # Drawn after IMU/GNSS so adding VO leaves their noise unchanged for a given seed.
+    vo = simulate_visual_odometry(states, config, rng)
+
     return {
         "time": times,
         "dt": config.dt,
@@ -233,4 +287,46 @@ def simulate_scenario(config: SimulatorConfig | None = None) -> dict[str, np.nda
         "imu_measurements": imu_measurements,
         "gnss_measurements": gnss_measurements,
         "gnss_available": gnss_available,
+        **vo,
+    }
+
+
+def simulate_visual_odometry(truth_states: np.ndarray, config: SimulatorConfig, rng: np.random.Generator) -> dict[str, np.ndarray]:
+    """Noisy SE(2) relative poses between consecutive tracked VO frames.
+
+    Frames are on the IMU grid every `vo_period`. Frame 0 is always tracked; later
+    frames are dropped with `vo_dropout_probability`, and the next delta then spans
+    from the last tracked frame, so `vo_from_index`/`vo_to_index` need not be one
+    stride apart. Returns (M = number of deltas):
+
+    - `vo_from_index`, `vo_to_index` (M,) IMU-grid sample indices of the two frames
+    - `vo_delta_truth`, `vo_delta_measurements` (M, 3) `[dx_body, dy_body, dyaw]`
+    - `vo_covariances` (M, 3, 3) measurement covariance used to draw the noise
+    """
+    num_steps = truth_states.shape[0]
+    vo_stride = max(1, int(round(config.vo_period / config.dt)))
+    frames = np.arange(0, num_steps, vo_stride)
+    tracked = rng.random(frames.shape[0]) >= config.vo_dropout_probability
+    tracked[0] = True
+    frames = frames[tracked]
+    from_index, to_index = frames[:-1], frames[1:]
+
+    poses = truth_states[:, [IDX_X, IDX_Y, IDX_YAW]]
+    delta_truth = relative_pose_2d(poses[from_index], poses[to_index])
+
+    translation_std = config.vo_translation_std + config.vo_translation_std_per_m * np.hypot(delta_truth[:, 0], delta_truth[:, 1])
+    yaw_std = config.vo_yaw_std + config.vo_yaw_std_per_rad * np.abs(delta_truth[:, 2])
+    stds = np.column_stack((translation_std, translation_std, yaw_std))
+    covariances = np.zeros((from_index.shape[0], 3, 3), dtype=float)
+    covariances[:, [0, 1, 2], [0, 1, 2]] = stds**2
+
+    delta_measurements = delta_truth + stds * rng.standard_normal(delta_truth.shape)
+    delta_measurements[:, 2] = wrap_angle(delta_measurements[:, 2])
+
+    return {
+        "vo_from_index": from_index,
+        "vo_to_index": to_index,
+        "vo_delta_truth": delta_truth,
+        "vo_delta_measurements": delta_measurements,
+        "vo_covariances": covariances,
     }

@@ -7,6 +7,7 @@ Linear Kalman filter study scripts.
 | `simple/` | From-scratch NumPy Kalman filter / RTS smoother: `kf_pv.py` (1D position/velocity), `kf_pva3d.py` (3D position/velocity/acceleration, `KalmanFilterPVA_RandomAcc3d`) |
 | `pykalman_check/` | The same models built on `pykalman`, for cross-checking: `kf_pv_pykalman.py`, `kf_pv_em_pykalman.py` (EM parameter estimation), `kf_pva3d_pykalman.py` |
 | `process_noise_sim/` | Monte Carlo checks of process-noise models: `process_noise.py` (random acceleration), `process_noise2.py` (random jerk). Derivation: [`doc/process_noise.md`](process_noise_sim/doc/process_noise.md) |
+| `doc/` | Explanatory documents: [`kf_basics.md`](doc/kf_basics.md) (KF/RTS derivation on the 1D position/velocity model) |
 | top level | Shared helpers: `x_generator.py` (truth trajectories), `kf_pv_plot.py`, `kf_pva_plot.py` |
 
 ## How to run

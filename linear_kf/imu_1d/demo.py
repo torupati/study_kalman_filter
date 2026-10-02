@@ -1,6 +1,7 @@
 """Simulate -> filter -> plot -> print metrics for the 1D IMU + position KF.
 
     uv run python -m linear_kf.imu_1d.demo
+    uv run python -m linear_kf.imu_1d.demo --scenario stop_and_go
     uv run python -m linear_kf.imu_1d.demo --outage 30 50 --accel-bias 0.05 --output-dir outputs/imu_1d_bias
 """
 
@@ -11,7 +12,7 @@ import numpy as np
 
 from .kf import FilterResult, KalmanFilterImu1d, run_filter, run_position_only_filter
 from .plotting import plot_compare_velocity, plot_errors, plot_overview
-from .simulator import SimConfig, SimResult, simulate
+from .simulator import SCENARIOS, SimConfig, SimResult, simulate
 
 X0 = np.array([0.0, 0.0])  # the filter does not know the true initial velocity
 P0 = np.diag([1.0**2, 2.0**2])
@@ -43,6 +44,7 @@ def summarize(sim: SimResult, res: FilterResult, skip: float = 5.0) -> dict[str,
 def parse_args(argv=None):
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     d = SimConfig()
+    p.add_argument("--scenario", choices=sorted(SCENARIOS), default=d.scenario, help="truth trajectory")
     p.add_argument("--duration", type=float, default=d.duration)
     p.add_argument("--imu-rate", type=float, default=d.imu_rate)
     p.add_argument("--pos-rate", type=float, default=d.pos_rate)
@@ -58,6 +60,7 @@ def parse_args(argv=None):
 def main(argv=None):
     args = parse_args(argv)
     cfg = SimConfig(
+        scenario=args.scenario,
         duration=args.duration,
         imu_rate=args.imu_rate,
         pos_rate=args.pos_rate,
@@ -72,7 +75,7 @@ def main(argv=None):
 
     out = args.output_dir
     out.mkdir(parents=True, exist_ok=True)
-    plot_overview(sim, "truth and measurements").savefig(out / "imu1d_overview.png", dpi=120)
+    plot_overview(sim, f"scenario {cfg.scenario}: truth and measurements").savefig(out / "imu1d_overview.png", dpi=120)
     plot_errors(sim, res, "IMU + position KF: error and $\\pm 2\\sigma$").savefig(out / "imu1d_errors.png", dpi=120)
     plot_compare_velocity(
         sim, {"IMU + position KF": res, "position-only KF (random acceleration model)": res_pos}, "velocity error"

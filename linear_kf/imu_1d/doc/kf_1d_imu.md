@@ -22,6 +22,7 @@ treated as unknown noise. This is the 1D version of what
 ```bash
 # from the repository root
 uv run python -m linear_kf.imu_1d.demo                     # writes outputs/linear_kf/imu_1d/*.png
+uv run python -m linear_kf.imu_1d.demo --scenario stop_and_go   # scenarios: sine (default), stationary, stop_and_go
 uv run python -m linear_kf.imu_1d.demo --outage 30 50 --accel-bias 0.05 --output-dir outputs/imu_1d_bias
 uv run python -m linear_kf.imu_1d.make_doc_figures         # rewrites the PNGs in this directory and prints the table in section 5
 uv run pytest tests/linear_kf/test_imu_1d.py
@@ -119,32 +120,45 @@ It is available every `imu_rate / pos_rate` = 100 IMU samples, and never during 
 
 `simulate(config, rng)` produces everything at the IMU rate (`SimResult`):
 
-1. True acceleration $a(t) = 0.5\sin(2\pi t/20) + 0.3\sin(2\pi t/7)$
-   ($\mathrm{m/s^2}$), sampled at the IMU times.
+1. True acceleration from the selected scenario (`SimConfig.scenario`, table
+   below), sampled at the IMU times.
 2. Truth $p$, $v$ integrated from that acceleration **with the same
-   zero-order-hold step as the filter**, starting from $p_0 = 0$, $v_0 = 1$ m/s.
+   zero-order-hold step as the filter**, starting from $p_0$ = `initial_position`
+   and the scenario's initial velocity.
    So the filter's motion model is exact, and any inconsistency in the results
    comes from noise and bias, not discretization error.
 3. Accelerometer: $a^m_k = a_k + b + n_k$.
 4. Position: $y_k = p_k + w_k$ at every `pos_decimation`-th sample, `NaN` elsewhere and during `pos_outage`.
+
+| `scenario` | True acceleration | $v_0$ |
+|---|---|---|
+| `sine` (default) | $0.5\sin(2\pi t/20) + 0.3\sin(2\pi t/7)$ m/s², smooth speed changes, always moving (Fig. 1) | 1 m/s |
+| `stationary` | 0: at rest the whole time | 0 |
+| `stop_and_go` | piecewise constant (`STOP_AND_GO_PHASES`): rest 5 s, then three cycles of accelerate / cruise / decelerate / rest (peak 4, 3 and 2.5 m/s), at rest from 51 s on (Fig. 4b) | 0 |
+
+The `stop_and_go` phase boundaries are whole seconds, so they fall on the IMU
+sample grid, and each acceleration is cancelled by an equal and opposite one.
+The velocity therefore returns to exactly 0 at every stop. To add a scenario, add an
+acceleration function and an entry to `SCENARIOS` in `simulator.py`.
 
 The accelerometer noise is drawn before the position noise, so for a fixed
 seed, changing only the position settings leaves the accelerometer data unchanged.
 
 | `SimConfig` field | Default | Meaning |
 |---|---|---|
+| `scenario` | `"sine"` | key of `SCENARIOS` |
 | `duration` | 60 s | |
 | `imu_rate` | 100 Hz | $1/\Delta t$ |
 | `pos_rate` | 1 Hz | must divide `imu_rate` |
 | `accel_noise_density` | 0.05 m/s²/√Hz | $N_a$; $\sigma_d = N_a/\sqrt{\Delta t}$ = 0.5 m/s² |
 | `accel_bias` | 0 | $b$, not modelled by the filter |
 | `pos_noise_std` | 0.5 m | $\sigma_p$ |
-| `initial_position`, `initial_velocity` | 0 m, 1 m/s | true initial state |
+| `initial_position`, `initial_velocity` | 0 m, `None` | true initial state; `None` uses the scenario's $v_0$ |
 | `pos_outage` | `None` | `(start, end)` seconds without position measurements |
 
 The filter starts from $\hat{\mathbf{x}}_0 = [0, 0]^T$ and
 $P_0 = \mathrm{diag}(1^2, 2^2)$ (`demo.X0`, `demo.P0`): it does not know the
-initial velocity of 1 m/s.
+initial velocity of 1 m/s in the `sine` scenario.
 
 ![Truth and measurements](imu1d_overview.png)
 
@@ -215,13 +229,19 @@ the filter's own std over the same samples. A consistent filter has RMSE ≈ sig
 
 | case | filter | pos RMSE [m] | pos sigma [m] | vel RMSE [m/s] | vel sigma [m/s] | mean NIS |
 |---|---|---|---|---|---|---|
-| default | IMU + position | 0.341 | 0.341 | 0.110 | 0.107 | 0.98 |
-| default | position-only | 0.692 | 0.837 | 0.662 | 1.080 | 0.66 |
-| outage 30–50 s | IMU + position | 1.212 | 1.253 | 0.156 | 0.148 | 1.00 |
-| bias 0.05 m/s² | IMU + position | 0.601 | 0.341 | 0.253 | 0.107 | 1.95 |
+| sine | IMU + position | 0.341 | 0.341 | 0.110 | 0.107 | 0.98 |
+| sine | position-only | 0.692 | 0.837 | 0.662 | 1.080 | 0.66 |
+| stationary | IMU + position | 0.341 | 0.341 | 0.110 | 0.107 | 0.98 |
+| stationary | position-only | 0.619 | 0.837 | 0.443 | 1.080 | 0.50 |
+| stop_and_go | IMU + position | 0.341 | 0.341 | 0.110 | 0.107 | 0.98 |
+| stop_and_go | position-only | 0.748 | 0.837 | 0.802 | 1.080 | 0.78 |
+| sine, outage 30–50 s | IMU + position | 1.212 | 1.253 | 0.156 | 0.148 | 1.00 |
+| sine, bias 0.05 m/s² | IMU + position | 0.601 | 0.341 | 0.253 | 0.107 | 1.95 |
+| stationary, bias 0.05 m/s² | IMU + position | 0.601 | 0.341 | 0.253 | 0.107 | 1.95 |
 
 The IMU filter is consistent with or without the outage: its error matches its
-own uncertainty. The bias case is not, which section 8 explains.
+own uncertainty. The bias case is not, which section 8 explains. The IMU
+filter's rows are identical across scenarios, which section 6.1 explains.
 
 ## 6. What the accelerometer buys: comparison with a position-only filter
 
@@ -253,6 +273,41 @@ deterministic, not white noise, so the model cannot be made consistent.
 With the accelerometer, the change in velocity is *measured* between position
 fixes, so the only thing left to estimate is the slowly wandering integration
 error. The velocity is then about 6× more accurate, and the filter's $\sigma$ is honest.
+
+### 6.1 The IMU filter does not care about the trajectory
+
+![stop_and_go truth](imu1d_overview_stop_and_go.png)
+
+*Fig. 4b: The `stop_and_go` scenario.*
+
+![Velocity error, stop_and_go](imu1d_vs_position_only_stop_and_go.png)
+
+*Fig. 4c: Same as Fig. 4, for `stop_and_go`.*
+
+In section 5 the IMU filter gives the same numbers for `sine`, `stationary`
+and `stop_and_go`, to three digits. This is not a coincidence. Subtract the
+truth from the filter equations and the trajectory cancels out. With
+$\tilde{\mathbf{x}} = \hat{\mathbf{x}} - \mathbf{x}$,
+
+$$
+\tilde{\mathbf{x}}_{k+1} = F\tilde{\mathbf{x}}_k + B\,(n_k + b), \qquad
+\tilde{\mathbf{x}}^+_k = (I - K_kH)\,\tilde{\mathbf{x}}_k + K_k w_k .
+$$
+
+The error depends only on the noises ($n_k$, $w_k$), the bias $b$ and the initial
+error. $P$ and $K$ do not depend on the data at all. So with the same seed,
+every scenario sees the same noise and gets the same error. The only
+difference is the initial velocity error (1 m/s for `sine`, 0 for the others),
+which has decayed by $t = 5$ s. This holds whenever the model is linear and
+exact, which is what the zero-order-hold simulator guarantees.
+
+The position-only filter is different. Its prediction assumes constant
+velocity, so the true acceleration enters its error as an unmodelled input.
+In Fig. 4c its velocity error jumps at every start and stop of an
+acceleration phase, and it does worst on `stop_and_go`, which has the most abrupt changes
+(vel RMSE 0.80 m/s). It does best on `stationary` (0.44 m/s), where the
+constant-velocity assumption is exactly true and its $\sigma_a = 1.0$ is
+far too generous (NIS 0.50).
 
 ## 7. Dead reckoning: a position outage
 
@@ -338,5 +393,8 @@ with `accel_bias_x`, `accel_bias_y` and `gyro_bias` (see its
   outage drift with section 7's formula.
 - `--pos-noise-std 5`: a poor position sensor. The IMU then carries most of
   the short-term information.
+- `--scenario stationary --accel-bias 0.05`: the vehicle is at rest, yet the
+  filter reports a velocity of about 0.2 m/s. Real systems exploit known rest
+  periods with a zero-velocity update (ZUPT), a pseudo-measurement $v = 0$.
 - Give the filter a wrong $\sigma_d$ or $\sigma_p$ (construct
   `KalmanFilterImu1d` by hand) and watch the mean NIS move away from 1.

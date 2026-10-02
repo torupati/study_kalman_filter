@@ -68,12 +68,26 @@ def main(argv=None):
     save(plot_errors(sim_b, res_b, "accelerometer bias 0.05 m/s$^2$, not modelled"), out / "imu1d_bias_errors.png")
     save(plot_innovation(sim, {"no bias": res, "bias 0.05 m/s$^2$": res_b}, "normalized innovation"), out / "imu1d_innovation.png")
 
+    sim_s = simulate(replace(base, scenario="stop_and_go"), np.random.default_rng(SEED))
+    save(plot_overview(sim_s, "scenario stop_and_go: truth and measurements"), out / "imu1d_overview_stop_and_go.png")
+    save(
+        plot_compare_velocity(
+            sim_s, {"IMU + position KF": run_imu_kf(sim_s), "position-only KF (random acceleration model)": run_position_only_kf(sim_s)}
+        ),
+        out / "imu1d_vs_position_only_stop_and_go.png",
+    )
+
     monte_carlo_table(
         [
-            ("base", base, "imu"),
-            ("base", base, "position-only"),
-            ("outage 30-50 s", outage, "imu"),
-            ("bias 0.05 m/s^2", biased, "imu"),
+            ("sine", replace(base, scenario="sine"), "imu"),
+            ("sine", replace(base, scenario="sine"), "position-only"),
+            ("stationary", replace(base, scenario="stationary"), "imu"),
+            ("stationary", replace(base, scenario="stationary"), "position-only"),
+            ("stop_and_go", replace(base, scenario="stop_and_go"), "imu"),
+            ("stop_and_go", replace(base, scenario="stop_and_go"), "position-only"),
+            ("sine, outage 30-50 s", outage, "imu"),
+            ("sine, bias 0.05 m/s^2", biased, "imu"),
+            ("stationary, bias 0.05 m/s^2", replace(biased, scenario="stationary"), "imu"),
         ]
     )
 

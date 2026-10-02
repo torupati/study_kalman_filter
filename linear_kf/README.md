@@ -37,6 +37,7 @@ uv run python -m linear_kf.process_noise_sim.process_noise2
 
 ```bash
 uv run python -m linear_kf.imu_1d.demo
+uv run python -m linear_kf.imu_1d.demo --scenario stop_and_go   # sine (default), stationary, stop_and_go
 uv run python -m linear_kf.imu_1d.demo --outage 30 50 --accel-bias 0.05
 uv run python -m linear_kf.imu_1d.make_doc_figures   # regenerates imu_1d/doc/*.png
 ```

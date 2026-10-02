@@ -3,7 +3,7 @@ from dataclasses import replace
 import numpy as np
 
 from linear_kf.imu_1d.kf import KalmanFilterImu1d, run_filter, run_position_only_filter, transition
-from linear_kf.imu_1d.simulator import SimConfig, simulate
+from linear_kf.imu_1d.simulator import SCENARIOS, SimConfig, simulate
 
 X0 = np.array([0.0, 0.0])
 P0 = np.diag([1.0, 4.0])
@@ -49,7 +49,7 @@ def test_predict_reproduces_simulator_kinematics_without_noise():
     sim = simulate(cfg, np.random.default_rng(0))
     kf = KalmanFilterImu1d(accel_noise_std=1e-6, pos_noise_std=1.0)
 
-    x, P = np.array([cfg.initial_position, cfg.initial_velocity]), np.eye(2) * 1e-12
+    x, P = np.array([cfg.initial_position, cfg.v0]), np.eye(2) * 1e-12
     for k in range(len(sim.t) - 1):
         x, P = kf.predict(x, P, sim.acc_meas[k], cfg.dt)
     np.testing.assert_allclose(x, [sim.pos_true[-1], sim.vel_true[-1]], atol=1e-9)
@@ -83,3 +83,37 @@ def test_imu_filter_beats_position_only_on_velocity():
         return np.sqrt(np.mean((r.x[m, 1] - sim.vel_true[m]) ** 2))
 
     assert vel_rmse(res) < 0.5 * vel_rmse(res_pos)
+
+
+def test_stationary_scenario_stays_at_rest():
+    cfg = SimConfig(scenario="stationary", initial_position=3.0, accel_noise_density=0.0, pos_noise_std=0.0)
+    sim = simulate(cfg, np.random.default_rng(0))
+
+    np.testing.assert_array_equal(sim.acc_true, 0.0)
+    np.testing.assert_array_equal(sim.vel_true, 0.0)
+    np.testing.assert_array_equal(sim.pos_true, 3.0)
+
+
+def test_stop_and_go_starts_and_ends_at_rest_and_stops_between_cycles():
+    cfg = SimConfig(scenario="stop_and_go", accel_noise_density=0.0, pos_noise_std=0.0)
+    sim = simulate(cfg, np.random.default_rng(0))
+    t = np.round(sim.t, 9)
+
+    assert sim.vel_true[0] == 0.0
+    np.testing.assert_allclose(sim.vel_true[t >= 51.0], 0.0, atol=1e-9)  # stopped for good after the last phase
+    for t_stop in (19.0, 34.0):  # end of the first two decelerations
+        np.testing.assert_allclose(sim.vel_true[t == t_stop], 0.0, atol=1e-9)
+    np.testing.assert_allclose(sim.vel_true.max(), 4.0)
+    assert np.all(sim.vel_true >= -1e-9)  # never moves backwards
+    np.testing.assert_allclose(sim.vel_true[t == 13.0], 4.0)  # cruising in the first cycle
+
+
+def test_every_scenario_filter_is_consistent():
+    for name in SCENARIOS:
+        cfg = SimConfig(scenario=name)
+        nis = []
+        for seed in range(5):
+            sim = simulate(cfg, np.random.default_rng(seed))
+            res = run_filter(KalmanFilterImu1d(cfg.accel_noise_std, cfg.pos_noise_std), sim.t, sim.acc_meas, sim.pos_meas, X0, P0)
+            nis.append(res.nis[~np.isnan(res.nis)])
+        assert 0.7 < np.mean(np.concatenate(nis)) < 1.3, name

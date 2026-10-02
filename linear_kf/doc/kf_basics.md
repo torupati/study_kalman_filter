@@ -7,6 +7,8 @@ This document derives the linear Kalman filter (KF) and the Rauch–Tung–Strie
 It is the entry point for the `linear_kf/` documents; the extended filter in
 [`imu_gnss_ekf_training/`](../../imu_gnss_ekf_training/README.md) uses the same
 predict/update structure with Jacobians in place of $F$ and $H$.
+[`imu_1d/doc/kf_1d_imu.md`](../imu_1d/doc/kf_1d_imu.md) extends this model by
+driving the prediction with an accelerometer.
 
 Background on covariance propagation, white noise and conditional Gaussians is
 in [`imu_gnss_ekf_training/doc/preliminary_math.md`](../../imu_gnss_ekf_training/doc/preliminary_math.md).

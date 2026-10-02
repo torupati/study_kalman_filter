@@ -38,37 +38,39 @@ for _ in range(N):
     sim_data.append(_p)
 
 
-def plot_posvel(sim_data):
+def plot_posvel(sim_data, n_show=11, highlight=0):
+    """Plot the first n_show sample paths: one highlighted in red, the rest in black."""
     fig, axes = plt.subplots(3, 1, figsize=(10, 6))
-    for _i, _v in enumerate(sim_data):
-        if _i > 10:
-            break
-        axes[0].plot (_v['time'], _v['acc'])
-#    axes[0].axhline(y=sig0*np.sqrt(dt), color='r')
-#    axes[0].axhline(y=-sig0*np.sqrt(dt), color='r')
+    # Analytic standard deviations: Var[a] = sigma^2 t, Var[v] = sigma^2 t^3 / 3, Var[p] = sigma^2 t^5 / 20.
+    t = np.array(sim_data[0]['time'])
+    stds = {
+        'acc': sig0 * np.sqrt(t),
+        'vel': sig0 * np.sqrt(np.power(t, 3) / 3.0),
+        'pos': sig0 * np.sqrt(np.power(t, 5) / 20.0),
+    }
+    for a, key in zip(axes, ['acc', 'vel', 'pos']):
+        a.fill_between(t, -2 * stds[key], 2 * stds[key], color='tab:blue', alpha=0.2, lw=0, label=r'$\pm 2\sigma$')
+        for _i, _v in enumerate(sim_data[:n_show]):
+            if _i != highlight:
+                a.plot(_v['time'], _v[key], color='k', lw=0.6, alpha=0.5)
+        # Draw the highlighted path last so it sits on top of the black ones.
+        a.plot(sim_data[highlight]['time'], sim_data[highlight][key], color='r', lw=1.2)
     axes[0].set_ylabel('$a(t)$ [m/s$^2$]')
-    for _i, _v in enumerate(sim_data):
-        if _i > 10:
-            break
-        axes[1].plot(_v['time'], _v['vel'])
     axes[1].set_ylabel('$v(t)$ [m/s]')
- #   axes[1].plot(dts, sig0 * np.sqrt(dts), color='r')
- #   axes[1].plot(dts, -sig0 * np.sqrt(dts), color='r')
-    for _i, _v in enumerate(sim_data):
-        if _i > 10:
-            break
-        axes[2].plot(_v['time'], _v['pos'])
     axes[2].set_ylabel('$p(t)$ [m]')
-#    axes[2].plot(dts, 1.0/3.0 * sig0 * np.power(dts, 1.5), color='r')
-#    axes[2].plot(dts, -1.0/3.0 * sig0 * np.power(dts, 1.5), color='r')
 
-    for a in axes:
+    for a, key in zip(axes, ['acc', 'vel', 'pos']):
         a.grid(True)
         a.set_xlim([0, t_end])
+        # Symmetric y range about zero, sized to the largest excursion drawn in this panel (paths or 2-sigma band).
+        ymax = max(max(np.max(np.abs(line.get_ydata())) for line in a.get_lines()), 2 * np.max(stds[key]))
+        a.set_ylim([-1.05 * ymax, 1.05 * ymax])
+    axes[0].legend(loc='upper right')
     axes[2].set_xlabel('time $t$ [s]')
+    fig.suptitle(f'Random jerk model: {n_show} of N={N} sample paths shown (red: sample #{highlight})\n'
+                 rf'noise density $\sigma$ = {sig0} m/s$^{{2.5}}$ (m/s$^3/\sqrt{{\mathrm{{Hz}}}}$), $F_s$ = {Fs} Hz')
     plt.tight_layout()
     plt.savefig('pos_vel_acc_model2.png')
-
 
 plot_posvel(sim_data)
 
@@ -98,7 +100,8 @@ for tidx in range(tlen):
     accpos_sample_covs.append(cov_vp[0][2])
 
 fig, axes = plt.subplots(3, 2, figsize=(12, 8), sharex=True)
-fig.suptitle(f'Simulation of Random Jerk Model N={N}')
+fig.suptitle(f'Random jerk model: sample variance/covariance over N={N} sample paths\n'
+             rf'noise density $\sigma$ = {sig0} m/s$^{{2.5}}$ (m/s$^3/\sqrt{{\mathrm{{Hz}}}}$), $F_s$ = {Fs} Hz')
 t_indices = np.array(t_indices)
 axes[0][0].set_title('variance of $a(t)$')
 axes[0][0].plot(t_indices, acc_sample_vars, label='sim')

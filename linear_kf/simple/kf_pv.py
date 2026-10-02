@@ -11,7 +11,7 @@ R = [sig1 * sig1]
 # Generate true and observed position
 t_idx = np.arange(0.0, t_end, 1.0/Fs)
 x_true = generte_true_pos_vel_1d_type1(t_idx, t_end/2.0)
-pos_obs = np.array(x_true)[:,0] + np.random.normal(0.0, sig1*sig1, len(x_true))
+pos_obs = np.array(x_true)[:,0] + np.random.normal(0.0, sig1, len(x_true))
 
 H = np.array([1, 0]).reshape(1, 2)
 

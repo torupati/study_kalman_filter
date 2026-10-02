@@ -11,7 +11,7 @@ Fs, t_end, sig0, sig1, x_init, x_var_init = kf_pv_1d_type1_condition()
 # Generate true and observed position
 t_idx = np.arange(0.0, t_end, 1.0/Fs)
 x_true = generte_true_pos_vel_1d_type1(t_idx, t_end/2.0)
-pos_obs = np.array(x_true)[:,0] + np.random.normal(0.0, sig1*sig1, len(x_true))
+pos_obs = np.array(x_true)[:,0] + np.random.normal(0.0, sig1, len(x_true))
 
 # ---
 # Kalman Filter

@@ -266,22 +266,27 @@ Running `uv run python -m linear_kf.simple.kf_pv` from the repository root write
 `pykalman_check.kf_pv_pykalman` writes the `*_pykalman.png` versions of the
 last three for comparison.
 
-## 8. Known discrepancy in the measurement simulation
+## 8. Simulating the measurements consistently with $R$
 
-Both `simple/kf_pv.py` and `pykalman_check/kf_pv_pykalman.py` (and
-`kf_pv_em_pykalman.py`) simulate the measurements as
+The scripts simulate the measurements as
 
 ```python
-pos_obs = x_true[:, 0] + np.random.normal(0.0, sig1 * sig1, len(x_true))
+pos_obs = x_true[:, 0] + np.random.normal(0.0, sig1, len(x_true))
+R = np.array([sig1 * sig1]).reshape(1, 1)
 ```
 
-`np.random.normal`'s second argument is the **standard deviation**, so the
-simulated noise has std $\sigma_p^2 = 0.25$ m, while the filter assumes
-$R = \sigma_p^2$, i.e. std $\sigma_p = 0.5$ m. The filter therefore assumes
-twice the actual noise std (4× the variance). It still works, but it trusts the
-measurements less than it should, so the estimates are smoother and lag more
-than the optimal filter. Its reported $P$ is also pessimistic (larger than the actual error).
-If EM were asked to estimate $R$ (`em_vars=['observation_covariance']` in
-[`pykalman_check/kf_pv_em_pykalman.py`](../pykalman_check/kf_pv_em_pykalman.py),
-which currently estimates only `initial_state_mean`), it should converge near
-$0.25^2 = 0.0625$, not $0.25$, for this reason.
+`np.random.normal`'s second argument is the **standard deviation**, while $R$
+is a **variance**, so the same `sig1` appears once as `sig1` and once squared.
+Mixing the two up is an easy mistake: earlier versions passed `sig1 * sig1` to
+`np.random.normal`, so the simulated noise had std $0.25$ m while the filter
+assumed $0.5$ m. The filter still worked, but it trusted the measurements less
+than it should (smoother, laggier estimates) and its $P$ overstated the actual
+error.
+
+A quick consistency check is the normalized innovation squared (NIS)
+$e_k^2 / S_k$, which averages to 1 when $Q$ and $R$ match the data. Averaged
+over 50 noise seeds, it is about 0.67 with the current code and was about 0.17
+with the old `sig1 * sig1` noise. The current value is still below 1 because
+$\sigma_a = 1.0$ is generous for this truth (§1.1), so the predicted position
+is more uncertain than it really is. A value far below 1 means the filter
+assumes too much noise, and a value far above 1 means too little.

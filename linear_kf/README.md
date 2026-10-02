@@ -6,7 +6,7 @@ Linear Kalman filter study scripts.
 |---|---|
 | `simple/` | From-scratch NumPy Kalman filter / RTS smoother: `kf_pv.py` (1D position/velocity), `kf_pva3d.py` (3D position/velocity/acceleration, `KalmanFilterPVA_RandomAcc3d`) |
 | `pykalman_check/` | The same models built on `pykalman`, for cross-checking: `kf_pv_pykalman.py`, `kf_pv_em_pykalman.py` (EM parameter estimation), `kf_pva3d_pykalman.py` |
-| `process_noise_sim/` | Monte Carlo checks of process-noise models: `process_noise.py` (random acceleration), `process_noise2.py` (random jerk). Derivation: [`doc/process_noise.md`](process_noise_sim/doc/process_noise.md) |
+| `process_noise_sim/` | Monte Carlo checks of process-noise models: `process_noise.py` (random acceleration), `process_noise2.py` (random jerk), `animate_process_noise.py` (movie of the random acceleration model over time). Derivation: [`doc/process_noise.md`](process_noise_sim/doc/process_noise.md) |
 | `imu_1d/` | 1D Kalman filter with the accelerometer as input and 1 Hz position updates: simulator, filter, demo CLI, tests. Explanation: [`doc/kf_1d_imu.md`](imu_1d/doc/kf_1d_imu.md) |
 | `doc/` | Explanatory documents: [`kf_basics.md`](doc/kf_basics.md) (KF/RTS derivation on the 1D position/velocity model) |
 | top level | Shared helpers: `x_generator.py` (truth trajectories), `kf_pv_plot.py`, `kf_pva_plot.py` |
@@ -31,6 +31,8 @@ uv run python -m linear_kf.pykalman_check.kf_pv_em_pykalman
 # process_noise_sim/
 uv run python -m linear_kf.process_noise_sim.process_noise
 uv run python -m linear_kf.process_noise_sim.process_noise2
+uv run python -m linear_kf.process_noise_sim.animate_process_noise                 # -> process_noise_anim.mp4 (~1.5 min to render)
+uv run python -m linear_kf.process_noise_sim.animate_process_noise --output pn.gif  # .gif if ffmpeg is unavailable; see --help
 ```
 
 `imu_1d/` is import-safe and writes into `--output-dir` (default `outputs/linear_kf/imu_1d/`, git-ignored):

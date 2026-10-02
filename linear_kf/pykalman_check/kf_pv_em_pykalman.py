@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from pykalman import KalmanFilter
 
-from .x_generator import generte_true_pos_vel_1d_type1, kf_pv_1d_type1_condition
+from ..x_generator import generte_true_pos_vel_1d_type1, kf_pv_1d_type1_condition
 
 np.random.seed(0)
 
@@ -12,7 +12,7 @@ Fs, t_end, sig0, sig1, x_init, x_var_init = kf_pv_1d_type1_condition()
 # Generate true and observed position
 t_idx = np.arange(0.0, t_end, 1.0/Fs)
 x_true = generte_true_pos_vel_1d_type1(t_idx, t_end/2.0)
-pos_obs = np.array(x_true)[:,0] + np.random.normal(0.0, sig1*sig1, len(x_true))
+pos_obs = np.array(x_true)[:,0] + np.random.normal(0.0, sig1, len(x_true))
 
 n_iter = 300 # EM iteration steps
 
@@ -45,7 +45,7 @@ kf = KalmanFilter(transition_matrices = F,
 print('before learning: x_init=', kf.initial_state_mean)
 x_est, P_est = kf.smooth(pos_obs)
 #for i in range(100):
-#    pos_obs = np.array(x_true)[:,0] + np.random.normal(0.0, sig1*sig1, len(x_true))
+#    pos_obs = np.array(x_true)[:,0] + np.random.normal(0.0, sig1, len(x_true))
 #    x_em, P_em = kf.em(pos_obs, n_iter = 1).smooth(pos_obs)
 x_em, P_em = kf.em(pos_obs, n_iter = n_iter).smooth(pos_obs)
 print('after learning: x_init', kf.initial_state_mean)

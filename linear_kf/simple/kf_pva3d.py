@@ -50,12 +50,12 @@ class KalmanFilterPVA_RandomAcc3d:
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
 
-    from .kf_pva_plot import (
+    from ..kf_pva_plot import (
         plot_kf_pva3d_state_filter,
         plot_kf_pva3d_states_smoother,
         plot_kf_pva3d_states_var,
     )
-    from .x_generator import generate_true_pos_vel_acc_3d_type1
+    from ..x_generator import generate_true_pos_vel_acc_3d_type1
 
     Fs = 10
     t_end = 10.0

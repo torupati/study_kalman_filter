@@ -10,6 +10,10 @@ Both scripts drive a chain of integrators with continuous-time white noise of po
 theoretical moments below. The match between simulated and analytic curves in
 `vel_sample_var.png` / `model2_cov_sim.png` is the "confirmed by plot matching" referred to here.
 
+The example figures in this directory were produced by running the scripts from here, e.g.
+`cd linear_kf/process_noise_sim/doc && PYTHONPATH=../../.. uv run python -m linear_kf.process_noise_sim.process_noise`.
+The scripts don't fix a random seed, so a rerun gives different sample paths.
+
 ## Discretization convention
 
 Both scripts sample a continuous white-noise process $w(t)$ with $E[w(t)w(s)] = q\,\delta(t-s)$ at
@@ -64,6 +68,13 @@ $$
 These are exactly the three reference curves plotted in `vel_sample_var.png`
 (`sig0**2 * t`, `(1/3)*sig0**2*t**3`, `(1/2)*sig0**2*t**2`).
 
+![Random acceleration model: sample variance/covariance vs. analytic curves](vel_sample_var.png)
+
+Sample paths, with the analytic $\pm 2\sigma$ band ($2\sigma_0/\sqrt{\Delta t}$ for the white
+acceleration, $2\sqrt{\mathrm{Var}[v(t)]}$ and $2\sqrt{\mathrm{Var}[p(t)]}$ from above):
+
+![Random acceleration model: sample paths with 2-sigma band](pos_vel_acc2.png)
+
 ## Model 2 — random jerk (`process_noise2.py`)
 
 State $[p, v, a]$, jerk is white noise:
@@ -112,6 +123,12 @@ These six formulas are exactly the reference curves overlaid in `model2_cov_sim.
 (`sig0**2*t`, `(1/3)*sig0**2*t**3`, `(1/20)*sig0**2*t**5`, `(1/2)*sig0**2*t**2`,
 `(1/8)*sig0**2*t**4`, `(1/6)*sig0**2*t**3`), confirmed there by Monte-Carlo sample covariance
 over `N=500` simulated paths matching the analytic curves.
+
+![Random jerk model: sample variance/covariance vs. analytic curves](model2_cov_sim.png)
+
+Sample paths, with the analytic $\pm 2\sigma$ band from the three variances above:
+
+![Random jerk model: sample paths with 2-sigma band](pos_vel_acc_model2.png)
 
 ## Relation between the two models
 

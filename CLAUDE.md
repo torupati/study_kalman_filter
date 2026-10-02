@@ -56,9 +56,16 @@ A planar (2D) EKF fusing IMU (accelerometer + gyro) and GNSS (position + velocit
 - Exports for external use come from `imu_gnss_ekf_training/__init__.py` (`EkfConfig`, `ImuGnssEkf`, `run_filter`, `SimulatorConfig`, `simulate_scenario`); `tests/` imports from there rather than reaching into submodules directly (except for `IDX_*` constants and `ImuGnssEkf`, which are imported from `imu_gnss_ekf_training.ekf`).
 - `EkfConfig`/`SimulatorConfig` intentionally duplicate several noise parameters (accel/gyro noise, bias walk stds, GNSS stds). `SimulatorConfig` specifies IMU white noise as a density (`accel_noise_density`, `gyro_noise_density`) with per-sample `accel_noise_std`/`gyro_noise_std` derived as properties (`density / sqrt(dt)`), while `EkfConfig` takes the per-sample std directly — callers (`demo.py`, `experiments.py`, tests) construct an `EkfConfig` from a `SimulatorConfig`'s values by hand; there's no shared conversion helper.
 
-### `linear_kf/` — standalone scratch scripts, now a real package
+### `linear_kf/` — linear KF study scripts, organized into subpackages
 
-Internal imports are relative (`from .x_generator import ...`), so scripts run via `-m` from the repo root (e.g. `uv run python -m linear_kf.kf_pv_pykalman`), not as bare `python linear_kf/kf_pv_pykalman.py`. Most of these files (`kf_pv.py`, `kf_pv_em_pykalman.py`, `kf_pv_pykalman.py`, `process_noise.py`, `process_noise2.py`) are exploratory scripts that simulate, plot, and `savefig(...)` at module scope with no `if __name__ == "__main__":` guard — running or importing them has side effects (writes PNGs into the current directory). `x_generator.py` (trajectory generators) and `kf_pva3d.py`'s `KalmanFilterPVA_RandomAcc3d` class (its own `__main__` block is guarded) are the only import-safe, unit-testable pieces, and are what `tests/linear_kf/` covers.
+Layout (run instructions, incl. why the working directory matters, are in `linear_kf/README.md`):
+
+- `linear_kf/simple/` — from-scratch NumPy implementations: `kf_pv.py` (1D position/velocity) and `kf_pva3d.py` (`KalmanFilterPVA_RandomAcc3d`, 3D position/velocity/acceleration).
+- `linear_kf/pykalman_check/` — the same models built on `pykalman`, for cross-checking: `kf_pv_pykalman.py`, `kf_pv_em_pykalman.py`, `kf_pva3d_pykalman.py` (imports the class from `simple/kf_pva3d.py`).
+- `linear_kf/process_noise_sim/` — process-noise Monte Carlo simulations (`process_noise.py` random acceleration, `process_noise2.py` random jerk) and their derivation in `doc/process_noise.md`.
+- Shared helpers stay at the `linear_kf/` top level: `x_generator.py` (truth trajectory generators), `kf_pv_plot.py`, `kf_pva_plot.py`.
+
+Internal imports are relative (`from ..x_generator import ...`), so scripts run via `-m` from the repo root (e.g. `uv run python -m linear_kf.pykalman_check.kf_pv_pykalman`), not as bare `python linear_kf/pykalman_check/kf_pv_pykalman.py`. Most of these files (`simple/kf_pv.py`, `pykalman_check/kf_pv_em_pykalman.py`, `pykalman_check/kf_pv_pykalman.py`, `process_noise_sim/process_noise.py`, `process_noise_sim/process_noise2.py`) are exploratory scripts that simulate, plot, and `savefig(...)` at module scope with no `if __name__ == "__main__":` guard — running or importing them has side effects (writes PNGs into the current directory). `x_generator.py` (trajectory generators) and `simple/kf_pva3d.py`'s `KalmanFilterPVA_RandomAcc3d` class (its own `__main__` block is guarded) are the only import-safe, unit-testable pieces, and are what `tests/linear_kf/` covers.
 
 ### Root-level files
 
@@ -67,6 +74,6 @@ Internal imports are relative (`from .x_generator import ...`), so scripts run v
 ### Two independent Kalman-filter implementation styles coexist
 
 - `imu_gnss_ekf_training/ekf.py`: hand-rolled predict/update using `np.linalg.solve` (avoids explicit matrix inversion) and the Joseph-form covariance update.
-- `linear_kf/*_pykalman.py`: same kind of models built on the `pykalman` library's `KalmanFilter.filter`/`.smooth`/`.em`, useful for cross-checking the from-scratch math.
+- `linear_kf/pykalman_check/*_pykalman.py`: same kind of models built on the `pykalman` library's `KalmanFilter.filter`/`.smooth`/`.em`, useful for cross-checking the from-scratch math.
 
-When editing filter math, check whether the corresponding `pykalman`-based script in `linear_kf/` encodes the same model (F/Q construction) and should be kept consistent.
+When editing filter math, check whether the corresponding `pykalman`-based script in `linear_kf/pykalman_check/` encodes the same model (F/Q construction) and should be kept consistent.

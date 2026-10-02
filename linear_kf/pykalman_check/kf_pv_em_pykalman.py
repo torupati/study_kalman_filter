@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from pykalman import KalmanFilter
 
-from .x_generator import generte_true_pos_vel_1d_type1, kf_pv_1d_type1_condition
+from ..x_generator import generte_true_pos_vel_1d_type1, kf_pv_1d_type1_condition
 
 np.random.seed(0)
 

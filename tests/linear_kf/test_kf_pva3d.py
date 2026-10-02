@@ -1,6 +1,6 @@
 import numpy as np
 
-from linear_kf.kf_pva3d import KalmanFilterPVA_RandomAcc3d
+from linear_kf.simple.kf_pva3d import KalmanFilterPVA_RandomAcc3d
 
 
 def test_H_selects_position_block():

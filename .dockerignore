@@ -1,0 +1,9 @@
+*
+!pyproject.toml
+!uv.lock
+!.python-version
+!linear_kf/
+!app/
+**/__pycache__
+**/*.png
+**/*.mp4

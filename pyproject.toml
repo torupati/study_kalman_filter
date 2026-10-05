@@ -24,3 +24,8 @@ dev = [
     "pytest>=9.1.1",
     "ruff>=0.16.8",
 ]
+# web UI (app/streamlit_app.py); not installed by a plain `uv sync`
+app = [
+    "google-cloud-storage",
+    "streamlit",
+]

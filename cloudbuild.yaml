@@ -1,0 +1,45 @@
+# Cloud Build pipeline for the imu_1d web UI (app/): test -> build -> push -> deploy to Cloud Run.
+# Run by the `imu1d-deploy` trigger on every push to main; app/setup_gcp.sh creates the trigger and the
+# resources it uses (Artifact Registry repo `apps`, bucket <project>-imu1d-movies, service accounts).
+# Images are tagged with the commit (SHORT_SHA, set by the trigger) and `latest`.
+# All Cloud Run settings live here, so the deployed service always matches this file.
+steps:
+  - id: test
+    name: ghcr.io/astral-sh/uv:python3.13-bookworm-slim
+    entrypoint: uv
+    args: [run, --frozen, pytest, -q]
+
+  - id: build
+    name: gcr.io/cloud-builders/docker
+    args: [build, -t, '${_REGION}-docker.pkg.dev/${PROJECT_ID}/apps/${_SERVICE}:${SHORT_SHA}', -t, '${_REGION}-docker.pkg.dev/${PROJECT_ID}/apps/${_SERVICE}:latest', .]
+
+  - id: push
+    name: gcr.io/cloud-builders/docker
+    args: [push, --all-tags, '${_REGION}-docker.pkg.dev/${PROJECT_ID}/apps/${_SERVICE}']
+
+  - id: deploy
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_SERVICE}
+      - --image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/apps/${_SERVICE}:${SHORT_SHA}
+      - --region=${_REGION}
+      - --service-account=${_SERVICE}-run@${PROJECT_ID}.iam.gserviceaccount.com
+      - --set-env-vars=IMU1D_MOVIE_BUCKET=${PROJECT_ID}-imu1d-movies   # bucket made by app/setup_gcp.sh
+      - --cpu=2
+      - --memory=2Gi
+      - --timeout=3600          # Streamlit's websocket is cut at the request timeout; a full render must fit
+      - --session-affinity      # Streamlit keeps session state in the instance
+      - --max-instances=3       # caps cost
+      - ${_AUTH_FLAG}
+
+substitutions:
+  _SERVICE: imu1d
+  _REGION: asia-northeast1
+  _AUTH_FLAG: --allow-unauthenticated         # --no-allow-unauthenticated to keep the service private
+
+options:
+  dynamicSubstitutions: true
+  logging: CLOUD_LOGGING_ONLY                # required with a user-specified build service account

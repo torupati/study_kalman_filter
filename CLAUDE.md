@@ -69,6 +69,10 @@ Layout (run instructions, incl. why the working directory matters, are in `linea
 
 Internal imports are relative (`from ..x_generator import ...`), so scripts run via `-m` from the repo root (e.g. `uv run python -m linear_kf.pykalman_check.kf_pv_pykalman`), not as bare `python linear_kf/pykalman_check/kf_pv_pykalman.py`. Most of these files (`simple/kf_pv.py`, `pykalman_check/kf_pv_em_pykalman.py`, `pykalman_check/kf_pv_pykalman.py`, `process_noise_sim/process_noise.py`, `process_noise_sim/process_noise2.py`) are exploratory scripts that simulate, plot, and `savefig(...)` at module scope with no `if __name__ == "__main__":` guard — running or importing them has side effects (writes PNGs into the current directory). `x_generator.py` (trajectory generators) and `simple/kf_pva3d.py`'s `KalmanFilterPVA_RandomAcc3d` class (its own `__main__` block is guarded) are the only import-safe, unit-testable pieces, and are what `tests/linear_kf/` covers.
 
+### `app/` — Streamlit web UI for `linear_kf/imu_1d` (Cloud Run)
+
+`app/streamlit_app.py` calls `imu_1d`'s `simulate`/`demo`/`animate` functions directly (no changes to the study code): plots on every input change, the slow `animate` movie on request, cached by a hash of its inputs plus the `imu_1d` source (GCS bucket `$IMU1D_MOVIE_BUCKET`, else a local dir). Its dependencies are the `app` dependency group (`uv run --group app streamlit run app/streamlit_app.py`); the root `Dockerfile`/`.dockerignore` build its image. CD: a Cloud Build trigger runs `cloudbuild.yaml` (pytest → docker build → push to Artifact Registry → `gcloud run deploy`) on pushes to `main`; all Cloud Run settings live in its deploy step, and `app/setup_gcp.sh` creates the GCP resources/trigger (see `app/README.md`). If you change `imu_1d`'s function signatures or add a source file the movie depends on, update the app (and its `CODE_FILES`).
+
 ### Root-level files
 
 `main.py` and `sample_kf_pva3d.json` are leftover/placeholder artifacts, not part of any package. `README.md` is currently empty — `imu_gnss_ekf_training/README.md` is the real documentation for that package.

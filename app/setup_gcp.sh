@@ -10,8 +10,7 @@
 #                      imu1d-run   (Cloud Run identity: only reads/writes the movie bucket)
 # 4. link the GitHub repo through the Cloud Build connection GITHUB_CONNECTION and create the trigger
 #    `imu1d-deploy` (push to main, only when app/linear_kf/build files change). The connection itself
-#    needs a browser login to GitHub, so it is not created here; without GITHUB_CONNECTION the script
-#    prints how to make one.
+#    needs a browser login to GitHub, so it is made by app/connect_github.sh, not here.
 set -euo pipefail
 
 : "${PROJECT:?set PROJECT to the GCP project id}"
@@ -61,12 +60,10 @@ if [[ -z "$GITHUB_CONNECTION" ]]; then
   cat <<EOF
 
 == 4. skipped: GITHUB_CONNECTION is not set
-Create a Cloud Build connection to GitHub (once; opens a browser login and the Cloud Build GitHub App install):
-  gcloud builds connections create github github --region=$REGION --project=$PROJECT
-  # follow the printed URL, install the app on $(basename "$(dirname "$GITHUB_REPO")")/$(basename "$GITHUB_REPO" .git), then check:
-  gcloud builds connections describe github --region=$REGION --project=$PROJECT   # installationState: COMPLETE
+Create the Cloud Build connection to GitHub (once; the script prints the two links to open in a browser):
+  PROJECT=$PROJECT bash app/connect_github.sh
 and rerun:
-  PROJECT=$PROJECT GITHUB_CONNECTION=github $0
+  PROJECT=$PROJECT GITHUB_CONNECTION=github bash $0
 EOF
   exit 0
 fi

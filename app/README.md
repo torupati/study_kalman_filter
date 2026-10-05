@@ -50,12 +50,12 @@ PROJECT=<project-id> app/setup_gcp.sh
    `logging.logWriter`, and `serviceAccountUser` on `imu1d-run`) and `imu1d-run` (the app's identity: only
    `storage.objectAdmin` on the bucket, so the public app cannot redeploy itself).
 
-Then connect GitHub. This needs a browser login, so do it yourself once:
+Then connect GitHub. `app/connect_github.sh` creates the Cloud Build connection `github` and waits for it,
+printing the two links you open in a browser: authorize Cloud Build on your GitHub account, then install the
+Cloud Build GitHub App on `torupati/study_kalman_filter`:
 
 ```bash
-gcloud builds connections create github github --region=asia-northeast1 --project=<project-id>
-# open the printed URL, authorize, and install the Cloud Build GitHub App on torupati/study_kalman_filter
-gcloud builds connections describe github --region=asia-northeast1 --project=<project-id>   # installationState: COMPLETE
+PROJECT=<project-id> bash app/connect_github.sh
 ```
 
 Finally rerun the script with the connection. It links the repo, creates the trigger `imu1d-deploy`

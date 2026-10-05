@@ -18,6 +18,7 @@ treated as unknown noise. This is the 1D version of what
 | [`plotting.py`](../plotting.py) | figure builders |
 | [`demo.py`](../demo.py) | CLI: simulate, filter, plot, print RMSE and NIS |
 | [`make_doc_figures.py`](../make_doc_figures.py) | regenerates every figure and table in this document |
+| [`animate.py`](../animate.py) | movie: the position density spreading in predict and shrinking in each update (§3) |
 
 ```bash
 # from the repository root
@@ -25,6 +26,7 @@ uv run python -m linear_kf.imu_1d.demo                     # writes outputs/line
 uv run python -m linear_kf.imu_1d.demo --scenario stop_and_go   # scenarios: sine (default), stationary, stop_and_go
 uv run python -m linear_kf.imu_1d.demo --outage 30 50 --accel-bias 0.05 --output-dir outputs/imu_1d_bias
 uv run python -m linear_kf.imu_1d.make_doc_figures         # rewrites the PNGs in this directory and prints the table in section 5
+uv run python -m linear_kf.imu_1d.animate                  # writes outputs/linear_kf/imu_1d/kf_imu1d_anim.mp4 and kf_imu1d_anim_error.png
 uv run pytest tests/linear_kf/test_imu_1d.py
 ```
 
@@ -185,6 +187,20 @@ So between position measurements, the filter runs 99 predictions in a row
 variance $S_k = P_{pp} + \sigma_p^2$. From these, `FilterResult.nis` computes
 the normalized innovation squared (NIS) $e_k^2/S_k$, which averages to 1 when
 the filter's $Q$ and $R$ match the data.
+
+`animate.py` turns this loop into a movie (20 s of simulation with a 9–15 s
+position outage by default). While predicting, the position density widens as
+$P \leftarrow FPF^\top + Q$ runs, which is the spreading shown by
+`process_noise_sim/animate_process_noise.py`, here starting from a finite
+posterior instead of zero. At each fix the movie pauses: the likelihood
+$\mathcal N(z, \sigma_p^2)$ fades in, and the prior turns into the posterior,
+which is the 1D Bayes update of `bayes_1d/` applied to the position marginal
+($K_p = P_{pp}/(P_{pp}+\sigma_p^2)$). The density is drawn over absolute position,
+with the true position as a "car" box; the x window follows the car. A second
+panel shows the 2σ ellipse in (position, velocity) error. The prediction shears
+it, because velocity uncertainty leaks into position, and the update squeezes it
+along position. The ±2σ sawtooth over time is saved as a separate image next to
+the movie (`kf_imu1d_anim_error.png`).
 
 ## 4. Results with the default settings
 

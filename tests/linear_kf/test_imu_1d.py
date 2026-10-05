@@ -117,3 +117,41 @@ def test_every_scenario_filter_is_consistent():
             res = run_filter(KalmanFilterImu1d(cfg.accel_noise_std, cfg.pos_noise_std), sim.t, sim.acc_meas, sim.pos_meas, X0, P0)
             nis.append(res.nis[~np.isnan(res.nis)])
         assert 0.7 < np.mean(np.concatenate(nis)) < 1.3, name
+
+
+def test_animation_track_and_frame_plan():
+    from linear_kf.imu_1d.animate import frame_plan, run_track
+
+    cfg = SimConfig(duration=5.0, imu_rate=50.0, pos_rate=1.0)
+    sim = simulate(cfg, np.random.default_rng(0))
+    trk = run_track(sim)
+
+    upd = sim.pos_available
+    # Prior == posterior without an update; at an update the position variance drops.
+    np.testing.assert_allclose(trk.P_prior[~upd], trk.P_post[~upd])
+    assert np.all(trk.P_post[upd, 0, 0] < trk.P_prior[upd, 0, 0])
+    # Between updates the prediction only grows the position variance.
+    assert np.all(np.diff(trk.P_prior[1:50, 0, 0]) > 0)
+
+    plan = frame_plan(sim.t, upd, fps=10.0, speed=1.0, update_pause=1.0)
+    stages = {(s, k) for s, k, _ in plan}
+    for k in np.flatnonzero(upd):
+        assert {("likelihood", k), ("blend", k), ("hold", k)} <= stages
+        assert ("predict", k) not in stages
+    ks = [k for _, k, _ in plan]
+    assert ks == sorted(ks) and ks[-1] == len(sim.t) - 1
+
+
+def test_animation_error_history_has_prior_and_posterior_at_updates():
+    from linear_kf.imu_1d.animate import error_history, run_track
+
+    sim = simulate(SimConfig(duration=3.0, imu_rate=10.0, pos_rate=1.0), np.random.default_rng(0))
+    trk = run_track(sim)
+    ht, he, hs = error_history(trk, sim)
+
+    assert len(ht) == len(sim.t) + sim.pos_available.sum()
+    assert np.all(np.diff(ht) >= 0)
+    for k in np.flatnonzero(sim.pos_available):
+        j = np.flatnonzero(ht == sim.t[k])
+        np.testing.assert_allclose(hs[j], np.sqrt([trk.P_prior[k, 0, 0], trk.P_post[k, 0, 0]]))
+        np.testing.assert_allclose(he[j[1]], trk.x_post[k, 0] - sim.pos_true[k])

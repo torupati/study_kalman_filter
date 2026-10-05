@@ -63,7 +63,7 @@ if [[ -z "$GITHUB_CONNECTION" ]]; then
 == 4. skipped: GITHUB_CONNECTION is not set
 Create a Cloud Build connection to GitHub (once; opens a browser login and the Cloud Build GitHub App install):
   gcloud builds connections create github github --region=$REGION --project=$PROJECT
-  # follow the printed URL, install the app on ${GITHUB_REPO#https://github.com/}, then check:
+  # follow the printed URL, install the app on $(basename "$(dirname "$GITHUB_REPO")")/$(basename "$GITHUB_REPO" .git), then check:
   gcloud builds connections describe github --region=$REGION --project=$PROJECT   # installationState: COMPLETE
 and rerun:
   PROJECT=$PROJECT GITHUB_CONNECTION=github $0

@@ -155,3 +155,30 @@ def test_animation_error_history_has_prior_and_posterior_at_updates():
         j = np.flatnonzero(ht == sim.t[k])
         np.testing.assert_allclose(hs[j], np.sqrt([trk.P_prior[k, 0, 0], trk.P_post[k, 0, 0]]))
         np.testing.assert_allclose(he[j[1]], trk.x_post[k, 0] - sim.pos_true[k])
+
+
+def test_animation_frame_plan_without_pause_is_one_frame_per_update():
+    from linear_kf.imu_1d.animate import frame_plan
+
+    sim = simulate(SimConfig(duration=5.0, imu_rate=50.0, pos_rate=1.0), np.random.default_rng(0))
+    plan = frame_plan(sim.t, sim.pos_available, fps=10.0, speed=1.0, update_pause=0.0)
+    upd = set(np.flatnonzero(sim.pos_available).tolist())
+    assert [(s, k) for s, k, _ in plan if k in upd] == [("hold", k) for k in sorted(upd)]
+    assert {s for s, _, _ in plan} == {"predict", "hold"}
+    # real time: 10 fps x 5 s, plus the start frame
+    assert len(plan) == 51
+
+
+def test_animation_blitted_frames_match_full_redraw():
+    from linear_kf.imu_1d.animate import frame_plan, make_animation, run_track
+
+    sim = simulate(SimConfig(duration=2.0, imu_rate=50.0, pos_rate=1.0), np.random.default_rng(0))
+    movie = make_animation(sim, run_track(sim), fps=10.0, speed=1.0, update_pause=1.0)
+    stages = [s for s, _, _ in frame_plan(sim.t, sim.pos_available, 10.0, 1.0, 1.0)]
+    assert len(stages) == movie.n_frames
+    pick = {stages.index(s) for s in ("predict", "likelihood", "blend", "hold")} | {movie.n_frames - 1}
+    blitted = {i: np.array(buf) for i, buf in enumerate(movie.frames(dpi=60)) if i in pick}
+    for i in sorted(pick):
+        movie.update(i)
+        movie.fig.canvas.draw()
+        np.testing.assert_array_equal(blitted[i], np.asarray(movie.fig.canvas.buffer_rgba()), err_msg=f"frame {i} ({stages[i]})")

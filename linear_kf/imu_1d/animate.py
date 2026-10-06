@@ -2,9 +2,11 @@
 
 Between position fixes the accelerometer drives the prediction and the position
 distribution spreads out (``P <- F P F^T + Q``, as in process_noise_sim). At each
-fix the movie pauses: the likelihood ``N(z, r)`` fades in on top of the prior, and
-the prior morphs into the posterior, which is the 1D Bayes update of bayes_1d
-(``K = P_pp / (P_pp + r)``) applied to the position marginal.
+fix the posterior replaces the prior, which is the 1D Bayes update of bayes_1d
+(``K = P_pp / (P_pp + r)``) applied to the position marginal. By default the movie
+runs on without stopping; with ``--update-pause SECONDS`` it stops at each fix while
+the likelihood ``N(z, r)`` fades in on top of the prior and the prior morphs into
+the posterior.
 
 Movie panels:
   left   position density over absolute position x: prior (predicted), likelihood,
@@ -15,19 +17,27 @@ The position error and +-2 sigma over time (the sawtooth of sigma) is saved as a
 separate image next to the movie (<output stem>_error.png).
 
     uv run python -m linear_kf.imu_1d.animate                     # ~20 s sim with a 9-15 s position outage
+    uv run python -m linear_kf.imu_1d.animate --update-pause 1.5  # stop 1.5 s at each fix to show the Bayes update
     uv run python -m linear_kf.imu_1d.animate --output kf.gif --duration 8 --no-outage
 """
 
 import argparse
+import subprocess
 import sys
 import time
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.animation import FFMpegWriter, FuncAnimation, PillowWriter
+from matplotlib.animation import FFMpegWriter
+from matplotlib.artist import Artist
+from matplotlib.axis import Axis
+from matplotlib.backends.backend_agg import FigureCanvasAgg
+from matplotlib.figure import Figure
 from matplotlib.patches import Rectangle
+from PIL import Image
 
 from .demo import P0, X0
 from .kf import KalmanFilterImu1d, run_filter
@@ -48,6 +58,93 @@ class Track:
     P_post: np.ndarray  # (N, 2, 2)
 
 
+@dataclass
+class Movie:
+    """A figure, a per-frame update and the artists that update changes; rendered by blitting.
+
+    Nearly all of a full redraw is text (titles, tick labels, legends, suptitle) that never changes, while the
+    curves cost well under a millisecond. So the figure is drawn once without the changing artists and kept as
+    the background; each frame restores it and redraws only the changing artists, plus the static artists that
+    sit above them in the same axes (spines, legend), so the stacking order is that of a full redraw.
+    """
+
+    fig: Figure
+    update: Callable[[int], None]
+    n_frames: int
+    dynamic: list[Artist]
+
+    def _redraw_order(self) -> list[Artist]:
+        dyn = set(self.dynamic)
+        order = []
+        for ax in self.fig.axes:
+            children = ax.get_children()
+            # lowest changing artist other than an axis (an axis' grid lies under everything anyway)
+            floor = min((a.get_zorder() for a in children if a in dyn and not isinstance(a, Axis)), default=np.inf)
+            order += sorted(  # stable, so equal zorders keep the order Axes.draw uses
+                (a for a in children if a in dyn or (a.get_zorder() >= floor and a is not ax.patch and not isinstance(a, Axis))),
+                key=lambda a: a.get_zorder(),
+            )
+        return order
+
+    def frames(self, dpi: float) -> Iterator[memoryview]:
+        """RGBA frame buffers; each is overwritten by the next frame, so copy it to keep it."""
+        fig = self.fig
+        fig.set_dpi(dpi)
+        canvas = FigureCanvasAgg(fig)
+        redraw = self._redraw_order()
+        for a in redraw:
+            a.set_animated(True)  # Axes.draw skips these
+        try:
+            self.update(0)
+            canvas.draw()
+            background = canvas.copy_from_bbox(fig.bbox)
+            for i in range(self.n_frames):
+                self.update(i)
+                canvas.restore_region(background)
+                for a in redraw:
+                    fig.draw_artist(a)
+                yield canvas.buffer_rgba()
+        finally:
+            for a in redraw:
+                a.set_animated(False)
+
+    def save(self, out: Path, fps: float, dpi: float, progress_callback: Callable[[int, int], None] | None = None):
+        """Write a .gif (Pillow) or, for any other suffix, an H.264 movie (ffmpeg)."""
+        frames = self.frames(dpi)
+        n = self.n_frames
+        if Path(out).suffix.lower() == ".gif":
+            images = []
+            for i, buf in enumerate(frames):
+                h, w = buf.shape[:2]
+                images.append(Image.frombuffer("RGBA", (w, h), bytes(buf), "raw", "RGBA", 0, 1))
+                if progress_callback:
+                    progress_callback(i, n)
+            images[0].save(out, save_all=True, append_images=images[1:], duration=int(1000 / fps), loop=0)
+            return
+        if not FFMpegWriter.isAvailable():
+            raise RuntimeError("ffmpeg not found; install it or write a .gif instead")
+        proc = None
+        try:
+            for i, buf in enumerate(frames):
+                if proc is None:  # the frame size is known once the first frame is drawn
+                    proc = subprocess.Popen(_ffmpeg_cmd(buf.shape[1], buf.shape[0], fps, out), stdin=subprocess.PIPE, stderr=subprocess.PIPE)
+                proc.stdin.write(buf)
+                if progress_callback:
+                    progress_callback(i, n)
+        finally:
+            if proc is not None:
+                _, err = proc.communicate()
+        if proc is not None and proc.returncode:
+            raise RuntimeError(f"ffmpeg failed ({proc.returncode}): {err.decode(errors='replace').strip()}")
+
+
+def _ffmpeg_cmd(w: int, h: int, fps: float, out: Path) -> list[str]:
+    return [FFMpegWriter.bin_path(), "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgba", "-s", f"{w}x{h}",
+            "-framerate", f"{fps:g}", "-i", "pipe:",
+            "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2",  # libx264 + yuv420p needs even width/height
+            "-c:v", "libx264", "-pix_fmt", "yuv420p", str(out)]
+
+
 def run_track(sim: SimResult) -> Track:
     cfg = sim.config
     kf = KalmanFilterImu1d(cfg.accel_noise_std, cfg.pos_noise_std)
@@ -62,9 +159,11 @@ def run_track(sim: SimResult) -> Track:
 def frame_plan(t: np.ndarray, pos_available: np.ndarray, fps: float, speed: float, update_pause: float) -> list[tuple[str, int, float]]:
     """Frames as (stage, IMU index k, progress s in [0, 1]).
 
-    "predict" frames step through the IMU samples at `speed` x real time. Every
-    position update k is expanded into "likelihood" (fade in), "blend" (prior ->
-    posterior) and "hold" frames, together lasting `update_pause` seconds.
+    "predict" frames step through the IMU samples at `speed` x real time. With
+    `update_pause` > 0, every position update k is expanded into "likelihood"
+    (fade in), "blend" (prior -> posterior) and "hold" frames, together lasting
+    `update_pause` seconds; with 0 the movie does not stop, and the update is a
+    single "hold" frame (prior, likelihood and posterior) on the time line.
     """
     dt = t[1] - t[0]
     upd = set(np.flatnonzero(pos_available).tolist())
@@ -76,7 +175,9 @@ def frame_plan(t: np.ndarray, pos_available: np.ndarray, fps: float, speed: floa
     plan = []
     for k in ks:
         k = int(k)
-        if k in upd:
+        if k in upd and update_pause <= 0:
+            plan.append(("hold", k, 1.0))
+        elif k in upd:
             plan += [("likelihood", k, (i + 1) / n_like) for i in range(n_like)]
             plan += [("blend", k, (i + 1) / n_blend) for i in range(n_blend)]
             plan += [("hold", k, 1.0)] * n_hold
@@ -128,7 +229,7 @@ def plot_error_history(sim: SimResult, trk: Track):
     return fig
 
 
-def make_animation(sim: SimResult, trk: Track, fps: float, speed: float, update_pause: float):
+def make_animation(sim: SimResult, trk: Track, fps: float, speed: float, update_pause: float) -> Movie:
     cfg = sim.config
     t, upd = sim.t, sim.pos_available
     r_std = cfg.pos_noise_std
@@ -270,16 +371,17 @@ def make_animation(sim: SimResult, trk: Track, fps: float, speed: float, update_
             z_band.set_x(z_err[k] - 2 * r_std)
             z_band.set_width(4 * r_std)
             z_band.set_alpha(0.15 * like_a)
-        return []
 
     update(0)
     fig.get_layout_engine().execute(fig)
     fig.set_layout_engine("none")  # freeze the layout: re-solving it every frame is slow and makes the axes jitter
-    return fig, FuncAnimation(fig, update, frames=len(plan), interval=1000.0 / fps, blit=False, repeat=False)
+    dynamic = [ax_pdf.xaxis, l_prior, l_like, l_post, m_z, m_est, m_true, car, car_text, phase, info,  # xlim follows the car
+               z_band, e_pr, e_po, c_pr, c_po]
+    return Movie(fig, update, len(plan), dynamic)
 
 
 def progress_printer(every: int = 10):
-    """Return an ``anim.save`` progress_callback printing frame count, elapsed time and ETA on one line (stderr)."""
+    """Return a ``Movie.save`` progress_callback printing frame count, elapsed time and ETA on one line (stderr)."""
     t0 = time.monotonic()
 
     def callback(i: int, n: int):
@@ -312,7 +414,8 @@ def parse_args(argv=None):
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--fps", type=float, default=30.0, help="movie frame rate (default: %(default)s)")
     p.add_argument("--speed", type=float, default=1.0, help="playback speed of the prediction vs. real time (default: %(default)s)")
-    p.add_argument("--update-pause", type=float, default=1.5, help="movie seconds spent on each position update (default: %(default)s)")
+    p.add_argument("--update-pause", type=float, default=0.0,
+                   help="movie seconds to stop at each position update and animate the Bayes update; 0: no stop (default: %(default)s)")
     p.add_argument("--dpi", type=int, default=100)
     return p.parse_args(argv)
 
@@ -338,14 +441,11 @@ def main(argv=None):
     plt.close(err_fig)
     print(png)
 
-    fig, anim = make_animation(sim, trk, args.fps, args.speed, args.update_pause)
-    if out.suffix.lower() == ".gif":
-        writer = PillowWriter(fps=args.fps)
-    else:
-        if not FFMpegWriter.isAvailable():
-            raise SystemExit("ffmpeg not found; install it or write a .gif instead (--output xxx.gif)")
-        writer = FFMpegWriter(fps=args.fps, codec="libx264", extra_args=["-pix_fmt", "yuv420p"])
-    anim.save(out, writer=writer, dpi=args.dpi, progress_callback=progress_printer())
+    if out.suffix.lower() != ".gif" and not FFMpegWriter.isAvailable():
+        raise SystemExit("ffmpeg not found; install it or write a .gif instead (--output xxx.gif)")
+    movie = make_animation(sim, trk, args.fps, args.speed, args.update_pause)
+    movie.save(out, args.fps, args.dpi, progress_callback=progress_printer())
+    plt.close(movie.fig)
     print(out)
 
 

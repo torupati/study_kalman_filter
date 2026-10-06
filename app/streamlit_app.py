@@ -24,7 +24,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 import streamlit as st  # noqa: E402
-from matplotlib.animation import FFMpegWriter, PillowWriter  # noqa: E402
+from matplotlib.animation import FFMpegWriter  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))  # `streamlit run` puts only app/ on sys.path
@@ -92,12 +92,7 @@ def movie_key(cfg: SimConfig, seed: int, movie: dict, suffix: str) -> str:
 def render_movie(cfg: SimConfig, seed: int, movie: dict, suffix: str, progress) -> bytes:
     sim = simulate(cfg, np.random.default_rng(seed))
     trk = animate.run_track(sim)
-    fig, anim = animate.make_animation(sim, trk, movie["fps"], movie["speed"], movie["update_pause"])
-    if suffix == ".mp4":
-        # libx264 + yuv420p needs even width/height, which not every dpi gives
-        writer = FFMpegWriter(fps=movie["fps"], codec="libx264", extra_args=["-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2", "-pix_fmt", "yuv420p"])
-    else:
-        writer = PillowWriter(fps=movie["fps"])
+    m = animate.make_animation(sim, trk, movie["fps"], movie["speed"], movie["update_pause"])
 
     def callback(i: int, n: int):
         if (i + 1) % 10 == 0 or i + 1 == n:
@@ -106,10 +101,10 @@ def render_movie(cfg: SimConfig, seed: int, movie: dict, suffix: str, progress) 
     try:
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / f"movie{suffix}"
-            anim.save(out, writer=writer, dpi=movie["dpi"], progress_callback=callback)
+            m.save(out, movie["fps"], movie["dpi"], progress_callback=callback)
             return out.read_bytes()
     finally:
-        plt.close(fig)
+        plt.close(m.fig)
 
 
 # ---------------------------------------------------------------------------- UI
@@ -162,12 +157,14 @@ def plots_tab(cfg: SimConfig, seed: int):
 def movie_tab(cfg: SimConfig, seed: int):
     st.write("Position density spreading in predict and shrinking at each position update, with the (p, v) error ellipse. "
              "Uses the simulation settings from the sidebar, cut to the movie duration below.")
-    c1, c2, c3 = st.columns(3)
+    c1, c2, c3, c4 = st.columns(4)
     duration = c1.slider("movie duration [s]", 5.0, MOVIE_MAX_DURATION, min(20.0, cfg.duration, MOVIE_MAX_DURATION), 1.0)
     quality = c2.radio("quality", ["preview (fast)", "full"], horizontal=True)
     speed = c3.slider("playback speed", 0.5, 4.0, 1.0, 0.5)
+    pause = c4.checkbox("stop at each position update", value=False,
+                        help="Stop 1.5 s at each fix while the likelihood fades in and the prior turns into the posterior.")
     fps, dpi = (15.0, 72) if quality.startswith("preview") else (30.0, 100)
-    movie = {"fps": fps, "dpi": dpi, "speed": speed, "update_pause": 1.5}
+    movie = {"fps": fps, "dpi": dpi, "speed": speed, "update_pause": 1.5 if pause else 0.0}
 
     outage = cfg.pos_outage
     if outage is not None:
@@ -183,7 +180,7 @@ def movie_tab(cfg: SimConfig, seed: int):
     store = movie_store()
     data = store.get(key)
     if data is None:
-        st.info("This movie has not been rendered yet. Rendering takes about a minute (preview) to several minutes (full); "
+        st.info("This movie has not been rendered yet. Rendering takes several seconds (preview) to a minute or two (full, with stops); "
                 "once done it is cached for everyone.")
         if not st.button("Render movie", type="primary"):
             return

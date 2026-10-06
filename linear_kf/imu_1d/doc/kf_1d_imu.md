@@ -192,10 +192,11 @@ the filter's $Q$ and $R$ match the data.
 position outage by default). While predicting, the position density widens as
 $P \leftarrow FPF^\top + Q$ runs, which is the spreading shown by
 `process_noise_sim/animate_process_noise.py`, here starting from a finite
-posterior instead of zero. At each fix the movie pauses: the likelihood
-$\mathcal N(z, \sigma_p^2)$ fades in, and the prior turns into the posterior,
-which is the 1D Bayes update of `bayes_1d/` applied to the position marginal
-($K_p = P_{pp}/(P_{pp}+\sigma_p^2)$). The density is drawn over absolute position,
+posterior instead of zero. At each fix the posterior replaces the prior, which
+is the 1D Bayes update of `bayes_1d/` applied to the position marginal
+($K_p = P_{pp}/(P_{pp}+\sigma_p^2)$). By default the movie runs on in real time;
+with `--update-pause 1.5` it stops 1.5 s at each fix while the likelihood
+$\mathcal N(z, \sigma_p^2)$ fades in and the prior turns into the posterior. The density is drawn over absolute position,
 with the true position as a "car" box; the x window follows the car. A second
 panel shows the 2σ ellipse in (position, velocity) error. The prediction shears
 it, because velocity uncertainty leaks into position, and the update squeezes it

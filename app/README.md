@@ -4,7 +4,7 @@
 the **Plots** tab (truth/measurements, error ± 2σ, velocity error vs. a position-only KF, RMSE/NIS table)
 is recomputed on every change, and the **Movie** tab renders `animate.py`'s predict/update movie on request.
 
-Rendering is slow (roughly 0.3–0.7 s per frame, i.e. minutes per movie), so each movie is cached under a hash
+Rendering takes tens of milliseconds per frame (seconds to a couple of minutes per movie), so each movie is cached under a hash
 of its inputs and of the `imu_1d` source files; anyone asking for the same movie later gets it at once, and
 editing `imu_1d` invalidates the old ones. The cache is
 

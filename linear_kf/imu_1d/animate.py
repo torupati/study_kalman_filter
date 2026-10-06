@@ -128,7 +128,10 @@ class Movie:
             for i, buf in enumerate(frames):
                 if proc is None:  # the frame size is known once the first frame is drawn
                     proc = subprocess.Popen(_ffmpeg_cmd(buf.shape[1], buf.shape[0], fps, out), stdin=subprocess.PIPE, stderr=subprocess.PIPE)
-                proc.stdin.write(buf)
+                try:
+                    proc.stdin.write(buf)
+                except BrokenPipeError:
+                    break  # ffmpeg exited early; communicate() below surfaces its stderr
                 if progress_callback:
                     progress_callback(i, n)
         finally:

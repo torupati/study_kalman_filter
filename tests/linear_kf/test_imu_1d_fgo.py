@@ -13,7 +13,7 @@ from linear_kf.imu_1d.fgo import (
     run_sliding_window_fgo,
     solve_window,
 )
-from linear_kf.imu_1d.kf import KalmanFilterImu1d, rts_smooth, run_filter
+from linear_kf.imu_1d.kf import KalmanFilterImu1d, rts_smooth, run_filter, transition
 from linear_kf.imu_1d.simulator import SimConfig, simulate
 
 X0 = np.array([0.0, 0.0])
@@ -181,3 +181,132 @@ def test_sliding_window_needs_two_nodes():
     sim = simulate(SimConfig(duration=3.0), np.random.default_rng(0))
     with pytest.raises(ValueError, match="at least two"):
         run_sliding_window_fgo(sim.t, sim.acc_meas, sim.pos_meas, 1.0, 1.0, X0, P0, window=1)
+
+
+# --- constant accelerometer bias node ------------------------------------------------------------
+
+BIAS_PRIOR_STD = 0.1
+
+
+def _augmented_kf_rts(t, acc_meas, pos_meas, accel_noise_std, pos_noise_std, x0, P0, bias_prior_std):
+    """Reference: KF + RTS on [p, v, b] with a constant b (no process noise on it), prior b ~ N(0, bias_prior_std^2).
+
+    Returns (filtered x, filtered P, smoothed x, smoothed P), each over all IMU samples.
+    """
+    n = len(t)
+    x = np.r_[x0, 0.0]
+    P = np.zeros((3, 3))
+    P[:2, :2], P[2, 2] = P0, bias_prior_std**2
+    R = pos_noise_std**2
+    xf, Pf = np.empty((n, 3)), np.empty((n, 3, 3))
+    steps = []
+    for k in range(n):
+        if not np.isnan(pos_meas[k]):
+            K = P[:, 0] / (P[0, 0] + R)
+            x = x + K * (pos_meas[k] - x[0])
+            I_KH = np.eye(3) - np.outer(K, [1.0, 0.0, 0.0])
+            P = I_KH @ P @ I_KH.T + R * np.outer(K, K)
+        xf[k], Pf[k] = x, P
+        if k < n - 1:
+            F, B = transition(t[k + 1] - t[k])
+            Fa, Ba = np.eye(3), np.r_[B, 0.0]
+            Fa[:2, :2], Fa[:2, 2] = F, -B  # the filter subtracts its bias estimate from each sample
+            Qa = accel_noise_std**2 * np.outer(Ba, Ba)
+            x, P = Fa @ x + Ba * acc_meas[k], Fa @ P @ Fa.T + Qa
+            steps.append((Fa, x, P))
+    xs, Ps = xf.copy(), Pf.copy()
+    for k in range(n - 2, -1, -1):
+        Fa, x_prior, P_prior = steps[k]
+        C = np.linalg.solve(P_prior, Fa @ Pf[k]).T
+        xs[k] = xf[k] + C @ (xs[k + 1] - x_prior)
+        Ps[k] = Pf[k] + C @ (Ps[k + 1] - P_prior) @ C.T
+    return xf, Pf, xs, Ps
+
+
+def _args(sim):
+    cfg = sim.config
+    return sim.t, sim.acc_meas, sim.pos_meas, cfg.accel_noise_std, cfg.pos_noise_std, X0, P0
+
+
+def test_preintegration_bias_jacobian_equals_chained_predict_with_bias_removed():
+    cfg = SimConfig(duration=5.0)
+    sim = simulate(cfg, np.random.default_rng(0))
+    kf = KalmanFilterImu1d(cfg.accel_noise_std, cfg.pos_noise_std)
+    i, j, b = 37, 290, 0.3
+    x = np.array([1.5, -0.7])
+    for k in range(i, j):
+        x, _ = kf.predict(x, np.eye(2), sim.acc_meas[k] - b, sim.t[k + 1] - sim.t[k])
+    pre = preintegrate(sim.t, sim.acc_meas, i, j, cfg.accel_noise_std)
+    np.testing.assert_allclose(pre.F @ np.array([1.5, -0.7]) + pre.delta - pre.J_bias * b, x, atol=1e-12)
+
+
+@pytest.mark.parametrize(
+    "cfg",
+    [SimConfig(accel_bias=0.05), SimConfig(scenario="stop_and_go", accel_bias=-0.08, pos_outage=(30.0, 50.0))],
+    ids=["sine_bias", "stop_and_go_outage_bias"],
+)
+def test_batch_fgo_with_bias_node_equals_augmented_rts(cfg):
+    sim = simulate(cfg, np.random.default_rng(1))
+    xf, Pf, xs, Ps = _augmented_kf_rts(*_args(sim), BIAS_PRIOR_STD)
+    fgo = run_batch_fgo(*_args(sim), bias_prior_std=BIAS_PRIOR_STD)
+    np.testing.assert_allclose(fgo.x, xs[:, :2], atol=1e-8)
+    np.testing.assert_allclose(fgo.P, Ps[:, :2, :2], atol=1e-10)
+    np.testing.assert_allclose(fgo.bias, xs[0, 2], atol=1e-10)  # the smoothed constant bias
+    np.testing.assert_allclose(fgo.bias_std, np.sqrt(Ps[0, 2, 2]), atol=1e-10)
+    np.testing.assert_allclose(fgo.x[-1], xf[-1, :2], atol=1e-8)  # newest state: the augmented KF
+
+
+def test_sliding_window_with_bias_newest_node_is_the_augmented_kf():
+    sim = simulate(SimConfig(accel_bias=0.05, pos_outage=(30.0, 50.0)), np.random.default_rng(1))
+    xf, Pf, _, _ = _augmented_kf_rts(*_args(sim), BIAS_PRIOR_STD)
+    sw = run_sliding_window_fgo(*_args(sim), window=3, bias_prior_std=BIAS_PRIOR_STD)
+    np.testing.assert_allclose(sw.x_online, xf[sw.key_idx, :2], atol=1e-9)
+    np.testing.assert_allclose(sw.P_online, Pf[sw.key_idx, :2, :2], atol=1e-11)
+    np.testing.assert_allclose(sw.bias_online, xf[sw.key_idx, 2], atol=1e-10)
+    np.testing.assert_allclose(sw.bias_std_online, np.sqrt(Pf[sw.key_idx, 2, 2]), atol=1e-10)
+
+
+def test_sliding_window_with_bias_equals_batch_on_the_data_seen_so_far():
+    cfg = SimConfig(duration=12.0, accel_bias=0.05, pos_outage=(4.0, 7.0))
+    sim = simulate(cfg, np.random.default_rng(2))
+    window = 3
+    sw = run_sliding_window_fgo(*_args(sim), window=window, bias_prior_std=BIAS_PRIOR_STD)
+    n_key = len(sw.key_idx)
+    for g in range(n_key):
+        k = sw.key_idx[min(g + window - 1, n_key - 1)]  # newest keyframe of the last solve that held node g
+        t, acc, pos, *rest = _args(sim)
+        batch = run_batch_fgo(t[: k + 1], acc[: k + 1], pos[: k + 1], *rest, bias_prior_std=BIAS_PRIOR_STD)
+        np.testing.assert_allclose(sw.x_key[g], batch.solution.values[g], atol=1e-9)
+        np.testing.assert_allclose(sw.P_key[g], batch.solution.marginal(g), atol=1e-11)
+        if g + window - 1 < n_key:
+            j = sw.key_idx[g + 1] if g + 1 < n_key else len(sim.t)
+            np.testing.assert_allclose(sw.x[sw.key_idx[g] : j], batch.x[sw.key_idx[g] : j], atol=1e-9)
+    final = run_batch_fgo(*_args(sim), bias_prior_std=BIAS_PRIOR_STD)
+    np.testing.assert_allclose(sw.bias_online[-1], final.bias, atol=1e-10)
+
+
+def test_bias_node_recovers_the_bias_and_restores_consistency():
+    cfg = SimConfig(accel_bias=0.05)
+    z, chi2_bias, chi2_plain = [], [], []
+    for seed in range(10):
+        sim = simulate(cfg, np.random.default_rng(seed))
+        fgo = run_batch_fgo(*_args(sim), bias_prior_std=BIAS_PRIOR_STD)
+        z.append((fgo.bias - cfg.accel_bias) / fgo.bias_std)
+        chi2_bias.append(fgo.solution.chi2 / fgo.solution.dof)
+        plain = run_batch_fgo(*_args(sim))
+        chi2_plain.append(plain.solution.chi2 / plain.solution.dof)
+    assert np.all(np.abs(z) < 3.0)
+    assert abs(np.mean(np.square(z)) - 1.0) < 1.0  # normalized bias error has unit variance (10 samples)
+    assert abs(np.mean(chi2_bias) - 1.0) < 0.15
+    assert np.mean(chi2_plain) > 1.3  # without the node the unmodelled bias inflates chi2
+
+
+def test_graph_solution_with_mixed_node_sizes():
+    graph = FactorGraph(2, [2, 1])
+    graph.add(prior_factor(0, [1.0, 2.0], np.eye(2)))
+    graph.add(prior_factor(1, [3.0], [[4.0]]))
+    sol = graph.solve()
+    np.testing.assert_allclose(sol.values[0], [1.0, 2.0])
+    np.testing.assert_allclose(sol.values[1], [3.0])
+    np.testing.assert_allclose(sol.marginal(1), [[4.0]])
+    np.testing.assert_array_equal(sol.columns(1, 0), [2, 0, 1])

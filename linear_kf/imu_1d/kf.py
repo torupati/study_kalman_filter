@@ -89,6 +89,34 @@ def run_filter(
     return FilterResult(xs, Ps, innov, S)
 
 
+@dataclass
+class SmootherResult:
+    x: np.ndarray  # (N, 2) smoothed state at each IMU time, given all measurements
+    P: np.ndarray  # (N, 2, 2) smoothed covariance
+
+
+def rts_smooth(kf: KalmanFilterImu1d, t: np.ndarray, acc_meas: np.ndarray, res: FilterResult) -> SmootherResult:
+    """Rauch-Tung-Striebel backward pass over the posteriors of ``run_filter``.
+
+    With the forward prior ``x_{k+1|k} = F x_{k|k} + B a_k``, ``P_{k+1|k} = F P_{k|k} F^T + Q``:
+
+        C_k = P_{k|k} F^T P_{k+1|k}^-1
+        x_{k|N} = x_{k|k} + C_k (x_{k+1|N} - x_{k+1|k})
+        P_{k|N} = P_{k|k} + C_k (P_{k+1|N} - P_{k+1|k}) C_k^T
+    """
+    n = len(t)
+    xs = res.x.copy()
+    Ps = res.P.copy()
+    for k in range(n - 2, -1, -1):
+        x_prior, P_prior = kf.predict(res.x[k], res.P[k], acc_meas[k], t[k + 1] - t[k])
+        F, _ = transition(t[k + 1] - t[k])
+        C = np.linalg.solve(P_prior, F @ res.P[k]).T  # P_{k|k} F^T P_prior^-1 (P_prior symmetric)
+        xs[k] = res.x[k] + C @ (xs[k + 1] - x_prior)
+        P = res.P[k] + C @ (Ps[k + 1] - P_prior) @ C.T
+        Ps[k] = 0.5 * (P + P.T)
+    return SmootherResult(xs, Ps)
+
+
 def run_position_only_filter(
     t: np.ndarray,
     pos_meas: np.ndarray,

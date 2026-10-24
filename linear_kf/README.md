@@ -8,7 +8,7 @@ Linear Kalman filter study scripts.
 | `pykalman_check/` | The same models built on `pykalman`, for cross-checking: `kf_pv_pykalman.py`, `kf_pv_em_pykalman.py` (EM parameter estimation), `kf_pva3d_pykalman.py` |
 | `process_noise_sim/` | Monte Carlo checks of process-noise models: `process_noise.py` (random acceleration), `process_noise2.py` (random jerk), `animate_process_noise.py` (movie of the random acceleration model's p/v/a distributions spreading over time). Derivation: [`doc/process_noise.md`](process_noise_sim/doc/process_noise.md) |
 | `bayes_1d/` | Bayes estimation of a 1D Gaussian position (prior × likelihood → posterior), and how it equals the KF measurement update: `bayes_gaussian_1d.py`. Explanation: [`doc/bayes_gaussian_1d.md`](bayes_1d/doc/bayes_gaussian_1d.md) |
-| `imu_1d/` | 1D Kalman filter with the accelerometer as input and 1 Hz position updates: simulator, filter, demo CLI, tests. Explanation: [`doc/kf_1d_imu.md`](imu_1d/doc/kf_1d_imu.md) |
+| `imu_1d/` | 1D Kalman filter with the accelerometer as input and 1 Hz position updates: simulator, filter, RTS smoother, batch factor graph optimization (`fgo.py`), demo CLI, tests. Explanation: [`doc/kf_1d_imu.md`](imu_1d/doc/kf_1d_imu.md) |
 | `doc/` | Explanatory documents: [`kf_basics.md`](doc/kf_basics.md) (KF/RTS derivation on the 1D position/velocity model) |
 | top level | Shared helpers: `x_generator.py` (truth trajectories), `kf_pv_plot.py`, `kf_pva_plot.py` |
 

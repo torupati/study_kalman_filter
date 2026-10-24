@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from .demo import P0, X0, run_imu_kf
-from .fgo import FgoResult, PriorFactor, build_graph, interpolate, run_batch_fgo, run_sliding_window_fgo
+from .fgo import FgoResult, PriorFactor, build_graph, interpolate, preintegrate, run_batch_fgo, run_sliding_window_fgo
 from .kf import FilterResult, KalmanFilterImu1d, run_filter
 from .plotting import EST, MEAS, OTHER, TRUTH, _shade_outage, _style
 from .simulator import SimConfig, SimResult, simulate
@@ -355,6 +355,29 @@ def monte_carlo_table(cases: list[tuple[str, SimConfig]]):
         print(f"  batch FGO: mean chi2/dof = {np.mean(chi2_dof):.3f}, mean NEES = {np.mean(nees):.3f} (expect 1 and 2)")
 
 
+def print_preintegration_vs_kf(sim: SimResult, t_i: float = 10.0, t_j: float = 11.0):
+    """Section 3.1: preintegration (delta, Sigma) vs the KF's prior, gain and posterior over one interval."""
+    cfg = sim.config
+    kf = run_imu_kf(sim)
+    i, j = int(round(t_i * cfg.imu_rate)), int(round(t_j * cfg.imu_rate))
+    pre = preintegrate(sim.t, sim.acc_meas, i, j, cfg.accel_noise_std)
+    x_prior, P_prior = pre.F @ kf.x[i] + pre.delta, pre.F @ kf.P[i] @ pre.F.T + pre.cov
+    R = cfg.pos_noise_std**2
+    K = P_prior[:, 0] / (P_prior[0, 0] + R)
+    x_post = x_prior + K * (sim.pos_meas[j] - x_prior[0])
+    P_info = np.linalg.inv(np.linalg.inv(P_prior) + np.outer([1.0, 0.0], [1.0, 0.0]) / R)
+    sw = run_sliding_window_fgo(*fgo_args(sim), window=2)
+    g = int(np.flatnonzero(sw.key_idx == j)[0])
+    print(f"\npreintegration vs KF over t = {t_i}-{t_j} s")
+    print(f"  delta {np.round(pre.delta, 4)}, Sigma {np.round(pre.cov, 5).tolist()}")
+    print(f"  true state at j {np.round([sim.pos_true[j], sim.vel_true[j]], 2)}, KF posterior P at i {np.round(kf.P[i], 4).tolist()}")
+    print(f"  prior at j: x {np.round(x_prior, 4)}, P {np.round(P_prior, 4).tolist()}; gain K {np.round(K, 3)}")
+    print(f"  predict with preintegration + update {np.round(x_post, 6)}; KF posterior {np.round(kf.x[j], 6)}")
+    print(f"  window-2 newest node {np.round(sw.x_online[g], 6)}")
+    print(f"  information-form P+ {np.round(P_info, 6).tolist()}; KF P+ {np.round(kf.P[j], 6).tolist()}")
+    print(f"  max diff P+ {np.abs(P_info - kf.P[j]).max():.1e}, x {np.abs(sw.x_online[g] - kf.x[j]).max():.1e}")
+
+
 def print_sigma_numbers(sim: SimResult, sim_outage: SimResult, kf_o, fgo_o):
     """Steady-state std mid-run (fix at t = 30 s, halfway, just before the next fix), the run ends, and the outage peak."""
     kf, fgo = run_imu_kf(sim), run_batch_fgo(*fgo_args(sim))
@@ -394,6 +417,7 @@ def main(argv=None):
     sim = simulate(base, np.random.default_rng(SEED))
     save(plot_wrong_prior(sim, WRONG_PRIOR_SIGMAS[-1]), out / "fgo_wrong_prior.png")
 
+    print_preintegration_vs_kf(sim)
     print_sigma_numbers(sim, sim_o, kf_o, fgo_o)
     print_wrong_prior_numbers(sim)
 

@@ -128,6 +128,61 @@ done once before the solve and kept as a constant. The test
 $F_{ij}\mathbf{x} + \boldsymbol{\delta}_{ij}$ and $F_{ij}PF_{ij}^\top + \Sigma_{ij}$
 match 253 chained `predict` calls to $10^{-12}$.
 
+**Preintegration is not a filter: where is the Kalman gain?** Preintegration
+reuses the KF's *prediction* recursion, but it has no update and no gain. It
+never produces a posterior. Here are its outputs for the interval
+$t = 10 \to 11$ s, next to the KF's quantities (default run, seed 0):
+
+| quantity | value | what it is |
+|---|---|---|
+| $\boldsymbol{\delta}_{ij}$ | [−0.018 m, −0.072 m/s] | the motion the accelerometer implies, starting from rest at the origin. **Not an estimate of $\mathbf{x}_j$**: the vehicle is at 33.89 m, 4.74 m/s. |
+| $\Sigma_{ij}$ | [[0.00083, 0.00125], [0.00125, 0.0025]] | only the accelerometer noise added during the interval: the **$Q$ part** of the prediction, not $P$ |
+| KF posterior $P_i$ | [[0.094, 0.020], [0.020, 0.010]] | the uncertainty from the prior and all past fixes. Preintegration does not know it. |
+
+The KF's prior at $j$ is preintegration *plus* the previous estimate:
+
+$$
+\hat{\mathbf{x}}^-_j = F_{ij}\hat{\mathbf{x}}_i + \boldsymbol{\delta}_{ij} = [33.228,\; 4.519], \qquad
+P^-_j = F_{ij}P_iF_{ij}^\top + \Sigma_{ij} = \begin{bmatrix} 0.146 & 0.032 \\ 0.032 & 0.013 \end{bmatrix}.
+$$
+
+Only now does the KF compute a gain with the fix $z_j$:
+$K = P^-_jH^\top(HP^-_jH^\top + R)^{-1} = [0.368,\; 0.080]$, the steady-state
+gain of `kf_1d_imu.md` §4. The result, $[33.469803,\; 4.571891]$, is the KF
+posterior at $j$.
+
+**FGO never forms a gain.** The posterior comes from the solve (section 4),
+which puts three things into one least-squares problem:
+
+- what is known about $\mathbf{x}_i$ (the prior factor, or the window's marginal factor);
+- the IMU factor $(F_{ij}, \boldsymbol{\delta}_{ij}, \Sigma_{ij})$;
+- the position factor at $j$.
+
+That is the same Bayes update in **information form**:
+
+$$
+P^+ = \left(P^{-\,-1} + H^\top R^{-1}H\right)^{-1}, \qquad
+\hat{\mathbf{x}}^+ = P^+\left(P^{-\,-1}\hat{\mathbf{x}}^- + H^\top R^{-1}z_j\right).
+$$
+
+It gives the KF's $P^+$ to $10^{-16}$. The newest node of a window-2 solve is
+$[33.469803,\; 4.571891]$, equal to the KF to $10^{-14}$. Information adds
+where covariances would need a gain, so a graph only ever sums factors.
+`test_single_node_graph_is_the_kf_update` checks one such update.
+
+Which posterior an FGO result is depends on which data the solve contained:
+
+| result | posterior | equals |
+|---|---|---|
+| sliding window, newest node (`x_online`) | $p(\mathbf{x}_k \mid \text{data up to } k)$, **online** | the KF (section 8.2) |
+| sliding window, older nodes (`x_key`) | $p(\mathbf{x}_k \mid \text{data up to } k + \text{lag})$, fixed-lag | — |
+| batch FGO | $p(\mathbf{x}_k \mid \text{all data})$, smoothed, **not online** | the RTS smoother (section 6) |
+
+So preintegration supplies the prediction's ingredients $(\boldsymbol{\delta}, \Sigma)$
+as a constraint between two nodes. The optimal posterior appears only when a
+solve combines that constraint with what is known about $\mathbf{x}_i$ and with
+the fix at $j$.
+
 In 3D with rotation, the increment depends on the start orientation and bias.
 The point of real IMU preintegration (Forster et al.) is to write it so that it
 does not have to be recomputed when those estimates change. In this linear 1D

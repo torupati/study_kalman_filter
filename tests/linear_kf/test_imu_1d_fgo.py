@@ -1,7 +1,18 @@
 import numpy as np
 import pytest
 
-from linear_kf.imu_1d.fgo import FactorGraph, keyframe_indices, position_factor, preintegrate, prior_factor, run_batch_fgo
+from linear_kf.imu_1d.fgo import (
+    FactorGraph,
+    build_graph,
+    keyframe_indices,
+    marginalize,
+    position_factor,
+    preintegrate,
+    prior_factor,
+    run_batch_fgo,
+    run_sliding_window_fgo,
+    solve_window,
+)
 from linear_kf.imu_1d.kf import KalmanFilterImu1d, rts_smooth, run_filter
 from linear_kf.imu_1d.simulator import SimConfig, simulate
 
@@ -107,3 +118,66 @@ def test_keyframes_are_fixes_plus_ends_and_too_dense_fixes_rejected():
     pos[7] = 1.0
     with pytest.raises(ValueError, match="two IMU samples apart"):
         keyframe_indices(pos)
+
+
+def test_marginalizing_a_node_keeps_the_joint_marginal_of_the_rest():
+    cfg = SimConfig(duration=6.0)
+    sim = simulate(cfg, np.random.default_rng(3))
+    graph, _ = build_graph(sim.t, sim.acc_meas, sim.pos_meas, cfg.accel_noise_std, cfg.pos_noise_std, X0, P0)
+    full = graph.solve()
+    nodes = list(range(graph.n_nodes))
+    x = dict(enumerate(full.x))
+
+    # marginalize an inner node: its two neighbours get one dense prior, which correlates them
+    factors = marginalize(graph.factors, 3, x)
+    kept = [n for n in nodes if n != 3]
+    sol = solve_window(factors, kept, x)
+    cols = np.concatenate([np.arange(2 * n, 2 * n + 2) for n in kept])
+    np.testing.assert_allclose(sol.x, full.x[kept], atol=1e-10)
+    np.testing.assert_allclose(sol.cov, full.cov[np.ix_(cols, cols)], atol=1e-12)
+
+
+@pytest.mark.parametrize("window", [2, 3])
+def test_sliding_window_equals_batch_on_the_data_seen_so_far(window):
+    """Linear factors marginalize exactly: each window solve is the batch solution up to its newest keyframe."""
+    cfg = SimConfig(duration=12.0, pos_outage=(4.0, 7.0))
+    sim = simulate(cfg, np.random.default_rng(2))
+    sw = run_sliding_window_fgo(sim.t, sim.acc_meas, sim.pos_meas, cfg.accel_noise_std, cfg.pos_noise_std, X0, P0, window)
+    n_key = len(sw.key_idx)
+    for g in range(n_key):
+        k = sw.key_idx[min(g + window - 1, n_key - 1)]  # newest keyframe of the last solve that held node g
+        batch = run_batch_fgo(sim.t[: k + 1], sim.acc_meas[: k + 1], sim.pos_meas[: k + 1], cfg.accel_noise_std, cfg.pos_noise_std, X0, P0)
+        np.testing.assert_allclose(sw.x_key[g], batch.solution.x[g], atol=1e-9)
+        np.testing.assert_allclose(sw.P_key[g], batch.solution.marginal(g), atol=1e-11)
+        if g + window - 1 < n_key:  # the IMU samples after node g came from that same solve
+            j = sw.key_idx[g + 1] if g + 1 < n_key else len(sim.t)
+            np.testing.assert_allclose(sw.x[sw.key_idx[g] : j], batch.x[sw.key_idx[g] : j], atol=1e-9)
+
+
+def test_sliding_window_newest_node_is_the_kf_and_full_window_is_batch():
+    cfg = SimConfig(scenario="stop_and_go", pos_outage=(30.0, 50.0))
+    sim, res, _, fgo = _run_all(cfg)
+    args = (sim.t, sim.acc_meas, sim.pos_meas, cfg.accel_noise_std, cfg.pos_noise_std, X0, P0)
+
+    sw = run_sliding_window_fgo(*args, window=4)
+    np.testing.assert_allclose(sw.x_online, res.x[sw.key_idx], atol=1e-9)
+    np.testing.assert_allclose(sw.P_online, res.P[sw.key_idx], atol=1e-11)
+
+    full = run_sliding_window_fgo(*args, window=len(fgo.key_idx))
+    np.testing.assert_allclose(full.x, fgo.x, atol=1e-8)
+    np.testing.assert_allclose(full.P, fgo.P, atol=1e-10)
+
+
+def test_longer_window_lowers_the_fixed_lag_covariance():
+    cfg = SimConfig(duration=20.0)
+    sim = simulate(cfg, np.random.default_rng(0))
+    args = (sim.t, sim.acc_meas, sim.pos_meas, cfg.accel_noise_std, cfg.pos_noise_std, X0, P0)
+    sigma = [run_sliding_window_fgo(*args, window=w).P_key[:, 0, 0] for w in (2, 3, 6)]
+    assert np.all(sigma[1] <= sigma[0] + 1e-12)
+    assert np.all(sigma[2] <= sigma[1] + 1e-12)
+
+
+def test_sliding_window_needs_two_nodes():
+    sim = simulate(SimConfig(duration=3.0), np.random.default_rng(0))
+    with pytest.raises(ValueError, match="at least two"):
+        run_sliding_window_fgo(sim.t, sim.acc_meas, sim.pos_meas, 1.0, 1.0, X0, P0, window=1)

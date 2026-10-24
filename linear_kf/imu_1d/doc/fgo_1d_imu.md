@@ -25,7 +25,7 @@ choices about what to keep in the window.
 
 ```bash
 # from the repository root
-uv run python -m linear_kf.imu_1d.make_fgo_doc_figures   # rewrites doc/fgo_*.png, prints the numbers in sections 7-9 (incl. 7.1)
+uv run python -m linear_kf.imu_1d.make_fgo_doc_figures   # rewrites doc/fgo_*.png, prints the numbers in sections 7-10
 uv run pytest tests/linear_kf/test_imu_1d_fgo.py
 ```
 
@@ -536,7 +536,161 @@ rows are the fixed-lag estimates at the IMU rate.
   comes from one keyframe of lag: window 2 already gets 0.38 m, since its next
   keyframe is the fix at 50 s (section 8.2).
 
-## 10. Cost
+## 10. A constant accelerometer bias node
+
+`kf_1d_imu.md` §8 shows what an unmodelled accelerometer bias of 0.05 m/s² does
+to the 2-state KF. The velocity error settles around +0.2 m/s, outside its
+±2σ band, and the mean NIS doubles. The cure suggested there is to estimate
+the bias. In a factor graph, that is one more node. Pass `bias_prior_std` to
+`run_batch_fgo` or `run_sliding_window_fgo`.
+
+### 10.1 The factor
+
+The accelerometer reads $a^m = a + b + n$, so the true motion is driven by
+$a^m - b$. Preintegrating that gives
+
+$$
+\mathbf{x}_j = F_{ij}\mathbf{x}_i + \boldsymbol{\delta}_{ij} - J_{ij}\,b + \mathbf{w}_{ij},
+\qquad J_{ij} = \frac{\partial\boldsymbol{\delta}_{ij}}{\partial a^m} .
+$$
+
+$\boldsymbol{\delta}_{ij}$ is linear in the samples, so $J_{ij}$ is the
+preintegration of a unit input. `preintegrate_cumulative` builds it alongside
+$\boldsymbol{\delta}$ with $J \leftarrow F_kJ + B_k$, starting from 0. For a
+1 s interval it is $[T^2/2,\; T] = [0.5,\; 1]$: a bias of $b$ shifts the
+increment by $b/2$ m in position and $b$ m/s in velocity.
+
+The IMU factor gets a third key, the bias node:
+
+$$
+\mathbf{r}_{ij} = \mathbf{x}_j - F_{ij}\mathbf{x}_i - \boldsymbol{\delta}_{ij} + J_{ij}\,b,
+\qquad
+\frac{\partial\mathbf{r}}{\partial b} = J_{ij}\ (2\times1).
+$$
+
+The bias node has a prior $b \sim \mathcal N(0, 0.1^2)$, roughly a turn-on bias
+specification. Every IMU factor touches it, so it is the one node in the graph
+connected to everything. The bias node has size 1 while keyframes have size 2,
+so `FactorGraph` takes per-node sizes, and `GraphSolution.values` holds one
+array per node.
+
+Notice that the measurements are preintegrated **once**. A new estimate of $b$
+changes the increment by $-J_{ij}b$, without re-integrating the samples. Here
+this correction is exact, because $\boldsymbol\delta$ is linear in $b$. In 3D,
+the increments also depend on rotation, and the same idea becomes the
+*first-order* bias correction of IMU preintegration (Forster et al.): an
+approximation that holds while the bias estimate stays close to the one used to integrate.
+
+### 10.2 The same as a KF on [p, v, b]
+
+Append $b$ to the KF state with no process noise. One step is
+
+$$
+\begin{bmatrix}\mathbf{x}\\ b\end{bmatrix}_{k+1} =
+\underbrace{\begin{bmatrix} F_k & -B_k \\ 0 & 1\end{bmatrix}}_{F^a_k}
+\begin{bmatrix}\mathbf{x}\\ b\end{bmatrix}_k + \begin{bmatrix} B_k \\ 0\end{bmatrix} a^m_k .
+$$
+
+Composing $F^a_k$ over an interval gives a top-right block that obeys
+$J \leftarrow F_kJ + B_k$, so it is exactly $-J_{ij}$. The bias Jacobian is the
+cross term that the augmented KF propagates step by step.
+
+The model is still linear-Gaussian, so section 6 applies unchanged:
+
+- **Batch FGO with the bias node equals an RTS smoother on $[p, v, b]$.** This
+  holds for the state, its covariance, and $\hat b$ with its σ, to about $10^{-11}$.
+- **The sliding window's newest node and its online bias equal the augmented KF**,
+  to about $10^{-12}$.
+
+The tests define that augmented KF/RTS as a reference and check both
+(`test_batch_fgo_with_bias_node_equals_augmented_rts`,
+`test_sliding_window_with_bias_newest_node_is_the_augmented_kf`).
+
+The sliding window never marginalizes the bias node. Each time the oldest
+keyframe goes, what it knew about $b$ moves into the new `MarginalFactor`,
+which now links the next keyframe *and* $b$. This is the fill-in of section
+8.1 in action.
+
+### 10.3 Results
+
+![Bias node](fgo_bias.png)
+
+*Fig. 6: Top: the online bias estimate (the newest window node, which equals
+the augmented KF) with ±2σ, and the batch estimate. Bottom: velocity error of
+the 2-state KF, batch FGO without the bias node, and batch FGO with it.
+True bias 0.05 m/s², seed 0.*
+
+**How fast the bias becomes known.** Online estimate (seed 0):
+
+| t | 2 s | 5 s | 10 s | 20 s | 30 s | 60 s |
+|---|---|---|---|---|---|---|
+| $\hat b$ ± σ [m/s²] | −0.004 ± 0.100 | 0.094 ± 0.084 | 0.048 ± 0.035 | 0.030 ± 0.014 | 0.037 ± 0.011 | 0.048 ± 0.007 |
+
+For the first seconds the estimate is just the prior. A bias shows up only as a
+*persistent* drift, so it takes tens of seconds to separate it from noise.
+The batch estimate, $0.0483 \pm 0.0069$, equals the online value at the last
+keyframe. That is expected: $b$ is constant, so the smoothed $b$ at every time
+equals the filtered $b$ at the end.
+
+**What limits it is the accelerometer noise, not the position noise.** Batch
+bias σ for the same run with lower accelerometer noise:
+
+| $N_a$ [m/s²/√Hz] | 0.05 (default) | 0.005 | 0.0005 |
+|---|---|---|---|
+| bias σ [m/s²] | 0.0069 | 0.00089 | 0.00046 |
+
+With almost no accelerometer noise, the bias is just the curvature of a
+quadratic fit $p_0 + v_0t + \tfrac12bt^2$ to 61 fixes over $T = 60$ s. That fit gives
+$\sigma_b \approx 2\sigma_p\sqrt{180/N}/T^2 = 0.00048$ m/s², matching the last
+column. At the default noise level, the velocity random walk
+($\sqrt{q\,t}$ = 0.05 m/s after 1 s) also bends the trajectory. Over a few
+seconds it looks just like a bias, so the two can only be told apart over long spans.
+
+**Monte Carlo** (`make_fgo_doc_figures.py`, bias 0.05 m/s², 50 seeds, $t \ge 5$ s):
+
+| estimator | pos RMSE [m] | pos sigma [m] | vel RMSE [m/s] | vel sigma [m/s] | $\chi^2$/dof |
+|---|---|---|---|---|---|
+| KF, no bias state | 0.601 | 0.341 | 0.253 | 0.107 | |
+| batch FGO, no bias node | 0.180 | 0.172 | 0.064 | 0.055 | 1.85 |
+| window 5 + bias node | 0.182 | 0.185 | 0.067 | 0.068 | |
+| batch FGO + bias node | 0.169 | 0.173 | 0.055 | 0.056 | 0.95 |
+
+- **The bias estimate is consistent.** The normalized error
+  $(\hat b - b)/\sigma_b$ has mean +0.09 and RMS 1.05 (expected 0 and 1).
+- **$\chi^2$ detects the missing node, and the node fixes it** (1.85 → 0.95).
+  Without the node, every IMU factor's velocity increment is wrong by
+  $bT = 0.05$ m/s. That is as large as its own noise $\sqrt{qT}$, so the cost nearly doubles.
+- **Surprise: the smoother barely needs the node** (position RMSE 0.180 vs
+  0.169 m), while the KF without a bias state is more than 3× worse (0.601 m).
+
+  The reason is symmetry. A constant acceleration error adds a quadratic,
+  *even* term to position around any time $t$. An estimate of the velocity at
+  $t$ that uses fixes symmetrically on both sides is insensitive to an even
+  term. The KF uses only one side, so the bias goes straight into its velocity
+  (the +0.2 m/s offset of `kf_1d_imu.md` §8).
+
+  The smoother is one-sided too, but only at the ends of the run. Fig. 6 shows
+  exactly that: without the node, its velocity error matches the run with the
+  node in the middle, and drifts off in the first and last seconds. Velocity
+  RMSE for seed 0:
+
+  | | 0–5 s | 5–55 s | 55–60 s |
+  |---|---|---|---|
+  | KF, no bias state | 0.506 | 0.245 | 0.169 |
+  | batch FGO, no bias node | 0.087 | 0.056 | 0.088 |
+  | batch FGO + bias node | 0.044 | 0.055 | 0.059 |
+
+  At 60 s, FGO without the node equals the 2-state KF, as section 6 says it
+  must: the last node is the filter's estimate.
+- **A short window gains little here.** With a bias node, window 5 is no
+  better than batch without one. Its bias estimate is only as good as the
+  online one in the table above, which takes tens of seconds to settle. The
+  node pays off in real time and for consistency. The newest node is the
+  augmented KF. At the keyframes after 20 s (50 seeds), its velocity error
+  averages +0.007 m/s with RMS 0.111 m/s. The 2-state KF averages +0.206 m/s
+  with RMS 0.231 m/s.
+
+## 11. Cost
 
 | | per new keyframe | all at once |
 |---|---|---|
@@ -550,15 +704,16 @@ for readability: `FactorGraph` shows the whole $A$ and $H$, which you can print 
 inspect. The preintegration (100 small matrix products per IMU factor, in
 Python) dominates the run time, not the solve.
 
-## 11. Where FGO goes beyond the filter
+## 12. Where FGO goes beyond the filter
 
 In this linear model, FGO and the KF/RTS family give identical answers. The
 reasons to prefer a graph appear when that stops being true:
 
-- **States the filter cannot keep cheaply.** A constant accelerometer bias is a
-  single node connected to every IMU factor ($\partial\boldsymbol{\delta}_{ij}/\partial b = -\sum_k F_{k+1,j}B_k$, with $F_{k+1,j}$ the transition from sample $k+1$ to $j$).
-  The filter would carry it in its state forever. This is the fix for
-  `kf_1d_imu.md` §8.
+- **Biases that change slowly.** Section 10's constant bias is one node, and here
+  it gives exactly what an augmented KF gives. Real biases drift. In a graph
+  they become a chain of bias nodes, one per keyframe, linked by random-walk
+  factors. Their past values stay revisable, which matters once the IMU factors
+  are nonlinear in the bias.
 - **Robust kernels.** Replace $\|\mathbf{r}\|^2$ by Huber or Cauchy for
   position factors. An outlier fix then gets down-weighted by iteratively
   reweighted least squares (IRLS), and past decisions can be revisited, which

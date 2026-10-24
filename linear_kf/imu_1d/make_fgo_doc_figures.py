@@ -26,6 +26,9 @@ WINDOW_COLORS = ("#86b6ef", "#3987e5", "#1c5cab", "#0d366b")  # ordinal blue ram
 OUTAGE = (30.0, 50.0)
 WRONG_P0 = 20.0  # [m] prior position mean in section 7.1; the truth starts at 0
 WRONG_PRIOR_SIGMAS = (30.0, 1.0, 0.1)  # [m] prior position std: honest, overconfident, very overconfident
+BIAS = 0.05  # [m/s^2] true accelerometer bias in section 10
+BIAS_PRIOR_STD = 0.1  # [m/s^2] prior std of the bias node
+BIAS_WINDOW = 5
 
 
 def save(fig, path: Path):
@@ -230,6 +233,94 @@ def print_wrong_prior_numbers(sim: SimResult):
     )
 
 
+def bias_runs(sim: SimResult):
+    """KF without a bias state, batch FGO without and with the bias node, and the sliding window with it."""
+    return (
+        run_imu_kf(sim),
+        run_batch_fgo(*fgo_args(sim)),
+        run_batch_fgo(*fgo_args(sim), bias_prior_std=BIAS_PRIOR_STD),
+        run_sliding_window_fgo(*fgo_args(sim), window=BIAS_WINDOW, bias_prior_std=BIAS_PRIOR_STD),
+    )
+
+
+def plot_bias(sim: SimResult):
+    """Bias estimate over time (online and batch) and the velocity error with and without the bias node."""
+    kf, plain, fgo, sw = bias_runs(sim)
+    tk = sim.t[sw.key_idx]
+    fig, axes = plt.subplots(2, 1, figsize=(8, 5.5), sharex=True, layout="constrained")
+    ax = axes[0]
+    lo, hi = sw.bias_online - 2 * sw.bias_std_online, sw.bias_online + 2 * sw.bias_std_online
+    ax.fill_between(tk, lo, hi, color=MEAS, alpha=0.13, linewidth=0)
+    online_label = "online estimate, $\\pm 2\\sigma$ (newest window node = augmented KF)"
+    ax.plot(tk, sw.bias_online, "o-", color=MEAS, linewidth=1.2, markersize=3, label=online_label)
+    ax.axhspan(fgo.bias - 2 * fgo.bias_std, fgo.bias + 2 * fgo.bias_std, color=EST, alpha=0.13, linewidth=0)
+    ax.axhline(fgo.bias, color=EST, linewidth=1.4, label=f"batch FGO: {fgo.bias:.4f} $\\pm$ {2 * fgo.bias_std:.4f} (2$\\sigma$)")
+    ax.axhline(BIAS, color=TRUTH, linewidth=1.0, linestyle="--", label=f"true bias {BIAS} m/s$^2$")
+    ax.set_ylim(-0.15, 0.25)
+    ax.set_ylabel("accel bias [m/s$^2$]")
+    ax.legend(loc="upper right", fontsize=8, frameon=False)
+    ax = axes[1]
+    for name, res, color in (("KF, no bias state", kf, MEAS), ("batch FGO, no bias node", plain, OTHER), ("batch FGO with bias node", fgo, EST)):
+        ax.plot(sim.t, res.x[:, 1] - sim.vel_true, color=color, linewidth=1.2, label=name)
+    sig = np.sqrt(fgo.P[:, 1, 1])
+    ax.fill_between(sim.t, -2 * sig, 2 * sig, color=EST, alpha=0.13, linewidth=0, label="$\\pm 2\\sigma$, FGO with bias node")
+    ax.axhline(0.0, color=TRUTH, linewidth=0.8)
+    ax.set_ylim(-0.4, 0.5)
+    ax.set_ylabel("velocity error [m/s]")
+    ax.set_xlabel("time [s]")
+    ax.legend(loc="lower right", fontsize=8, frameon=False, ncols=2)
+    for a in axes:
+        _style(a)
+    fig.suptitle(f"constant accelerometer bias {BIAS} m/s$^2$, estimated as one node")
+    return fig
+
+
+def print_bias_numbers(sim: SimResult):
+    """Section 10: online bias convergence, velocity RMSE at the ends vs the middle, and the noise limit on the bias std."""
+    kf, plain, fgo, sw = bias_runs(sim)
+    tk = sim.t[sw.key_idx]
+    print(f"\nbias {BIAS}: batch {fgo.bias:.4f} +- {fgo.bias_std:.4f}")
+    for T in (2, 5, 10, 20, 30, 60):
+        i = int(np.flatnonzero(np.isclose(tk, T))[0])
+        print(f"  online at t = {T:2d} s: {sw.bias_online[i]:+.4f} +- {sw.bias_std_online[i]:.4f}")
+    for lo, hi in ((0.0, 5.0), (5.0, 55.0), (55.0, 60.01)):
+        m = (sim.t >= lo) & (sim.t < hi)
+        rmse = [np.sqrt(np.mean((r.x[m, 1] - sim.vel_true[m]) ** 2)) for r in (kf, plain, fgo)]
+        print(f"  vel RMSE {lo:.0f}-{hi:.0f} s: KF {rmse[0]:.3f}, FGO no node {rmse[1]:.3f}, FGO + node {rmse[2]:.3f}")
+    for density in (0.05, 0.005, 0.0005):
+        s = simulate(replace(sim.config, accel_noise_density=density), np.random.default_rng(SEED))
+        print(f"  accel noise density {density}: batch bias std {run_batch_fgo(*fgo_args(s), bias_prior_std=BIAS_PRIOR_STD).bias_std:.5f}")
+
+
+def bias_monte_carlo_table(cfg: SimConfig):
+    print(f"\n(bias {BIAS} m/s^2, {N_MONTE_CARLO} seeds, t >= 5 s)")
+    print("| estimator | pos RMSE [m] | pos sigma [m] | vel RMSE [m/s] | vel sigma [m/s] | chi2/dof |")
+    print("|---|---|---|---|---|---|")
+    rows: dict[str, list[dict[str, float]]] = {}
+    z, online_kf, online_aug = [], [], []
+    for seed in range(N_MONTE_CARLO):
+        sim = simulate(cfg, np.random.default_rng(seed))
+        kf, plain, fgo, sw = bias_runs(sim)
+        k = sw.key_idx[sim.t[sw.key_idx] >= 20.0]  # online velocity at keyframes, after the bias has settled
+        online_kf.append(kf.x[k, 1] - sim.vel_true[k])
+        online_aug.append(sw.x_online[sim.t[sw.key_idx] >= 20.0, 1] - sim.vel_true[k])
+        for name, res, chi2 in (
+            ("KF, no bias state", kf, np.nan),
+            ("batch FGO, no bias node", plain, plain.solution.chi2 / plain.solution.dof),
+            (f"window {BIAS_WINDOW} + bias node", sw, np.nan),
+            ("batch FGO + bias node", fgo, fgo.solution.chi2 / fgo.solution.dof),
+        ):
+            rows.setdefault(name, []).append({**summarize(sim, res.x, res.P), "chi2": chi2})
+        z.append((fgo.bias - BIAS) / fgo.bias_std)
+    for name, rs in rows.items():
+        mean = {k: np.mean([r[k] for r in rs]) for k in rs[0]}
+        chi2 = "" if np.isnan(mean["chi2"]) else f"{mean['chi2']:.2f}"
+        print(f"| {name} | {mean['pos_rmse']:.3f} | {mean['pos_sigma']:.3f} | {mean['vel_rmse']:.3f} | {mean['vel_sigma']:.3f} | {chi2} |")
+    print(f"  batch bias: mean (b - b_true) / sigma = {np.mean(z):+.2f}, rms = {np.sqrt(np.mean(np.square(z))):.2f}")
+    for name, e in (("2-state KF", np.concatenate(online_kf)), ("augmented KF (newest window node)", np.concatenate(online_aug))):
+        print(f"  online velocity error at keyframes, t >= 20 s, {name}: mean {e.mean():+.3f}, rms {np.sqrt(np.mean(e**2)):.3f}")
+
+
 def summarize(sim: SimResult, x: np.ndarray, P: np.ndarray, skip: float = 5.0) -> dict[str, float]:
     m = sim.t >= skip
     return {
@@ -305,8 +396,13 @@ def main(argv=None):
 
     print_sigma_numbers(sim, sim_o, kf_o, fgo_o)
     print_wrong_prior_numbers(sim)
+
+    sim_b = simulate(replace(base, accel_bias=BIAS), np.random.default_rng(SEED))
+    save(plot_bias(sim_b), out / "fgo_bias.png")
+    print_bias_numbers(sim_b)
     if not args.skip_monte_carlo:
         monte_carlo_table([("sine", base), ("sine, outage 30-50 s", outage)])
+        bias_monte_carlo_table(replace(base, accel_bias=BIAS))
 
 
 if __name__ == "__main__":

@@ -19,6 +19,7 @@ treated as unknown noise. This is the 1D version of what
 | [`demo.py`](../demo.py) | CLI: simulate, filter, plot, print RMSE and NIS |
 | [`make_doc_figures.py`](../make_doc_figures.py) | regenerates every figure and table in this document |
 | [`animate.py`](../animate.py) | movie: the position density spreading in predict and shrinking in each update (§3) |
+| [`fgo.py`](../fgo.py) | the same problem as a factor graph (batch and sliding window), explained in [`fgo_1d_imu.md`](fgo_1d_imu.md) |
 
 ```bash
 # from the repository root

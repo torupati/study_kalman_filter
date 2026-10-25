@@ -376,8 +376,11 @@ def marginalize(factors: list[Factor], node: int, x: dict[int, np.ndarray]) -> l
 
         H' = H_kk - H_km H_mm^-1 H_mk,   g' = g_k - H_km H_mm^-1 g_m
 
-    is the information left on the kept nodes. Writing H' = L L^T, the factor's residual is
-    ``L^T d + L^-1 g'``. Factor keys are node ids, not positions in a graph.
+    is the information left on the kept nodes. H' can be singular: with the bias node, eliminating the
+    first keyframe constrains only x_1 + J_bias b (2 directions of the 3-dim [x_1, b]), because the bias
+    prior does not touch that keyframe. So rather than a Cholesky factor, use H' = V W V^T over its
+    nonzero eigenvalues: the factor has residual ``W^1/2 V^T d + W^-1/2 V^T g'`` with one row per
+    direction the marginal informs. Factor keys are node ids, not positions in a graph.
     """
     touching = [f for f in factors if node in f.keys]
     rest = [f for f in factors if node not in f.keys]
@@ -401,15 +404,17 @@ def marginalize(factors: list[Factor], node: int, x: dict[int, np.ndarray]) -> l
     m, k = slice(0, dm), slice(dm, None)
     H_k = H[k, k] - H[k, m] @ np.linalg.solve(H[m, m], H[m, k])
     g_k = g[k] - H[k, m] @ np.linalg.solve(H[m, m], g[m])
-    L = np.linalg.cholesky(0.5 * (H_k + H_k.T))
-    J = L.T
+    w, V = np.linalg.eigh(0.5 * (H_k + H_k.T))
+    nonzero = w > 1e-9 * w.max()
+    w, V = w[nonzero], V[:, nonzero]
+    J = np.sqrt(w)[:, None] * V.T
     jacobians = [J[:, offset[n] - dm : offset[n] - dm + len(x[n])] for n in keep]
     prior = MarginalFactor(
         tuple(keep),
         np.eye(len(J)),
         jacobians=jacobians,
         x_lin=[np.array(x[n]) for n in keep],
-        r_lin=np.linalg.solve(L, g_k),
+        r_lin=(V.T @ g_k) / np.sqrt(w),
     )
     return [*rest, prior]
 

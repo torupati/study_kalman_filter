@@ -505,16 +505,20 @@ $H'$ is the **Schur complement**. For Gaussians this is exact marginalization:
 the information about $\mathbf{x}_k$, with $\mathbf{x}_m$ integrated out.
 
 `marginalize` turns $(H', \mathbf{g}')$ back into a factor so the window solve
-treats it like any other. With $H' = LL^\top$ and $\mathbf{d} = \mathbf{x}_k - \mathbf{x}_k^{\text{lin}}$,
+treats it like any other. With the eigendecomposition $H' = VWV^\top$ over its
+nonzero eigenvalues and $\mathbf{d} = \mathbf{x}_k - \mathbf{x}_k^{\text{lin}}$,
 
 $$
-\mathbf{r}^{\text{marg}} = L^\top\mathbf{d} + L^{-1}\mathbf{g}'
+\mathbf{r}^{\text{marg}} = W^{1/2}V^\top\mathbf{d} + W^{-1/2}V^\top\mathbf{g}'
 \quad\Rightarrow\quad
 \|\mathbf{r}^{\text{marg}}\|^2 = \mathbf{d}^\top H'\mathbf{d} + 2\,\mathbf{g}'^\top\mathbf{d} + \text{const},
 $$
 
 which is the `MarginalFactor`. It is already whitened (covariance $I$), and
-its Jacobian $L^\top$ is fixed at the linearization point $\mathbf{x}^{\text{lin}}$.
+its Jacobian $W^{1/2}V^\top$ is fixed at the linearization point $\mathbf{x}^{\text{lin}}$.
+A Cholesky factor $H' = LL^\top$ would also work when $H'$ is positive definite.
+$H'$ can be singular, though (section 10.2), and then the eigendecomposition
+gives one row per direction the marginal actually informs.
 
 **Fill-in.** The new factor connects *all* of $\mathbf{x}_k$ to each other. In the
 chain here, the oldest node touches only the next one, so the marginal prior is
@@ -664,7 +668,12 @@ The tests define that augmented KF/RTS as a reference and check both
 The sliding window never marginalizes the bias node. Each time the oldest
 keyframe goes, what it knew about $b$ moves into the new `MarginalFactor`,
 which now links the next keyframe *and* $b$. This is the fill-in of section
-8.1 in action.
+8.1 in action. The first marginal is rank-deficient: the first IMU factor
+constrains only $\mathbf{x}_1 + J_b\,b$, which is 2 directions of the 3-dim
+$(\mathbf{x}_1, b)$, because the bias prior factor does not touch keyframe 0.
+That is why `marginalize` uses an eigendecomposition rather than a Cholesky
+factor. A Cholesky factor sometimes worked here only because rounding left a
+$10^{-13}$ eigenvalue positive.
 
 ### 10.3 Results
 

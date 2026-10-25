@@ -1,15 +1,14 @@
 # 1D Kalman filter with an accelerometer (IMU) and position measurements
 
 This document explains the 1D IMU + position Kalman filter in
-[`linear_kf/imu_1d/`](..). A vehicle moves along a line. An accelerometer
-measures its acceleration at 100 Hz, and a position sensor (think of a 1D GNSS)
-measures its position at 1 Hz. The filter estimates position and velocity.
+[`linear_kf/imu_1d/`](..).
 
-It builds on [`linear_kf/doc/kf_basics.md`](../../doc/kf_basics.md), which derives
-the KF on a position-only model. The difference here is that the accelerometer
-drives the prediction as a known **input**, instead of acceleration being
-treated as unknown noise. This is the 1D version of what
-[`imu_gnss_ekf_training/`](../../../imu_gnss_ekf_training/README.md) does in 2D.
+- A vehicle moves along a line.
+- An accelerometer measures its acceleration at 100 Hz
+- A position sensor (think of a 1D GNSS) measures its position at 1 Hz.
+
+The filter estimates position and velocity.
+
 
 | File | Contents |
 |---|---|
